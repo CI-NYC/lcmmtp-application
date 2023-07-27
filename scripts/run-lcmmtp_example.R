@@ -34,6 +34,7 @@ fit <- lcmmtp(lcmmtp_foo,
 
 fit
 
+# modify data set so that if the observation is observed at c1, they have an outcome
 lcmmtp_foo_mod <- lcmmtp_foo |>
   mutate(Y_mod = case_when(is.na(Y) & c1 == 1 ~ 0,
                        TRUE ~ Y
@@ -56,8 +57,6 @@ tp1_fit <- lcmmtp(lcmmtp_foo_mod,
               "glm",
               folds=2
 )
-
-tp1_fit
 
 #Error in `[.default`(M, complete.cases(M), ) : 
 #incorrect number of dimensions
