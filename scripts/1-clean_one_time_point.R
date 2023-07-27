@@ -1,8 +1,9 @@
-#### Test figuring out
+#### Crude code to test out one time point for temporality logic
+
 library(tidyverse)
 
 cohort <- read_rds(here::here("data","derived","hospitalized_cohort_with_queens.rds"))
-labs <- read_rds(here::here("data/raw/2020-08-17/wcm_labs_filtered.rds"))
+labs <- read_rds(here::here("data", "raw", "2020-08-17", "wcm_labs_filtered.rds"))
 
 # select cohort date variables (cohort parsed date-times, cp_dt)
 cp_dt <-
@@ -17,7 +18,11 @@ cp_dt <-
          ) |>
   mutate(t1_end = t1_start + hours(24),
          M_time = case_when(M_time > Y_time ~ Y_time - hours(1), # fix temporality of a few AKIs that are after death
-                            TRUE ~ M_time))
+                            TRUE ~ M_time)) |>
+  filter(!(A_time < t1_start) |
+         !(M_time < t1_start) |
+         !(Y_time < t1_start) |
+         !(Cens_time < t1_start)) # remove 3 rows with nonsensical times
 
 ### All d-dimers, all pts
 ddimers <- labs |>
@@ -225,8 +230,7 @@ int_immediate_full_int <- reduce(list(int_immediate_l1_potassium,
                                       int_immediate_z1_ddimer), ~full_join(.x,.y)) |>
   full_join(int_immediate) |>
   select(empi, t1_start, t1_end, A_time, M_time, Y_time, Cens_time,
-         contains("l1"), contains("z1"), contains("a1"), contains("m1"), -z1_start
-  )
+         contains("l1"), contains("z1"), contains("a1"), contains("m1"), -z1_start)
 
 int_immediate_final <- int_immediate_full_int |>
   mutate(Y1 = case_when(Y_time < t1_start ~ 1, # (for when it's not the first time point) need to check if already died
@@ -292,7 +296,7 @@ int_not_immediate_full_int <- reduce(list(int_not_immediate_l1_potassium,
                                       int_not_immediate_z1_ddimer), ~full_join(.x,.y)) |>
   full_join(int_not_immediate) |>
   select(empi, t1_start, t1_end, A_time, M_time, Y_time, Cens_time,
-         contains("l1"), contains("z1"), contains("a1"), contains("m1")
+         contains("l1"), contains("z1"), contains("a1"), contains("m1"), -z1_start
   )
 
 int_not_immediate_final <- int_not_immediate_full_int |>
@@ -453,34 +457,20 @@ aki_not_immediate_final <- aki_not_immediate_full_int |>
 # mutate(C1 = ifelse(Cens_time < t1_end, 0, 1))
 
 
+t1_covars <-
+  reduce(list(aki_not_immediate_final,
+  aki_immediate_final,
+  int_not_immediate_final,
+  int_immediate_final,
+  nevers_final), ~full_join(.x,.y)) |>
+  mutate(miss_L1_ddimer = ifelse(is.na(L1_ddimer), 1, 0),
+         miss_L1_potassium = ifelse(is.na(L1_potassium), 1, 0),
+         miss_Z1_ddimer = ifelse(is.na(Z1_ddimer), 1, 0),
+         miss_Z1_potassium = ifelse(is.na(Z1_potassium), 1, 0),
+         across(starts_with("L1"), ~ifelse(is.na(.x), mean(.x, na.rm=T), .x)),
+         across(starts_with("Z1"), ~ifelse(is.na(.x), mean(.x, na.rm=T), .x)),
+         ##### FIX THIS LATER
+         A1 = case_when(A1 == 2 ~ 1, TRUE ~ A1)
+         )
 
-### Find patients for whom AKI before intubation (M_t < A_t)
-aki_first <-
-  cp_dt |>
-  filter(M_time < A_time)
-
-ddimers_t1 <- cp_dt |>
-  left_join(ddimers) |>
-  filter(ddimer_dt %within% interval(t1_start, t1_end)) |>
-  select(empi, t1_start, t1_end, A_time, M_time, Y_time, ddimer_t1_dt = ddimer_dt, ddimer_t1_value = ddimer_value)
-
-ddimers_t1 |>
-  filter(is.na(A_time), is.na(M_time))
-
-potassium_t1 <-
-  cp_dt |>
-  left_join(potassium) |>
-  filter(potassium_dt %within% interval(t1_start, t1_end)) |>
-  select(empi, potassium_t1_dt = potassium_dt, potassium_t1_value = potassium_value)
-
-potassium_t1
-
-test_t1 <- cp_dt |>
-  left_join(ddimers_t1) |>
-  left_join(potassium_t1)  |>
-  mutate(id = row_number()) |>
-  select(id, t1_start, t1_end, everything(), -empi)
-
-view(test_t1)
-
-view(ddimers_t1)
+saveRDS(t1_covars, "data/derived/draft_t1_covars.rds")
