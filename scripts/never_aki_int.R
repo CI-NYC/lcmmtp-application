@@ -21,7 +21,7 @@ ddimers <- labs |>
   select(empi, result_dt, result_value)|>
   mutate(name = "ddimer")
 
-ddimers_nest <- ddimers |> nest(.by = empi)
+# ddimers_nest <- ddimers |> nest(.by = empi)
 
 ### All potassium, all pts
 potassium <- labs |>
@@ -32,16 +32,17 @@ potassium <- labs |>
   select(empi, result_dt, result_value) |>
   mutate(name = "potassium")
 
-potassium_nest <- potassium |> nest(.by = empi)
+# potassium_nest <- potassium |> nest(.by = empi)
 
 all_labs_clean <- bind_rows(ddimers, potassium)
 
-### Find patients who were never intubated or AKI
+### Filter for patients who were never intubated or AKI
 nevers <-
   cp_dt |>
   filter((is.na(A_time) & is.na(M_time)) 
   ) 
 
+# 
 nevers_clean <-
   nevers |>
   nest(.by = empi) |>
@@ -53,11 +54,11 @@ nevers_clean <-
       ) |>
       complete(window = 1:ceiling(max_windows)) |>
       fill(t1_start) |>
-      mutate(m_start = t1_start + days(window - 1),
-             m_end = m_start + hours(12) - seconds(1),
-             z_start = m_start + hours(12),
+      mutate(l_start = t1_start + days(window - 1),
+             l_end = l_start + hours(12) - seconds(1),
+             z_start = l_start + hours(12),
              z_end = t1_start + days(1) - seconds(1)) |>
-      select(window, m_start, m_end, z_start, z_end)
+      select(window, l_start, l_end, z_start, z_end)
   }) 
   ) |>
   unnest(cols = data)
@@ -65,33 +66,25 @@ nevers_clean <-
 nevers_clean |>
   filter(window == 1) |>
   left_join(ddimers) |>
-  filter(result_dt %within% interval(m_start, z_end))
+  filter(result_dt %within% interval(l_start, z_end))
 
 never_labs <- function(covar, window_num){
   
-  # M_col_name <- paste0("M_", window_num, "_", covar_label)
-  # M_miss_col_name <- paste0("M_", window_num, "_missing_", covar_label)
-  # Z_col_name <- paste0("Z_", window_num, "_", covar_label)
-  # Z_miss_col_name <- paste0("Z_", window_num, "_missing_", covar_label)
-  # 
   # extract labs within the window of interest
   rel_labs <-
     nevers_clean |>
     filter(window == window_num) |>
     left_join(all_labs_clean |> filter(name == covar)) |>
-    filter(result_dt %within% interval(m_start, z_end))
+    filter(result_dt %within% interval(l_start, z_end))
   
-  # if in M interval, record as such
-  Ms <- rel_labs |>
+  # if in L interval, record as such
+  Ls <- rel_labs |>
     drop_na(result_value) |>
-    filter(result_dt %within% interval(m_start, m_end)) |>
+    filter(result_dt %within% interval(l_start, l_end)) |>
     arrange(result_dt) |>
     distinct(empi, .keep_all = T) |>
     mutate(missing = ifelse(is.na(result_value), 1, 0)) |>
-    select(empi, window, M_value = result_value, M_missing = missing)
-    #rename_at(all_of("result_value"), ~M_col_name) |>
-    #rename_at(all_of("missing"), ~M_miss_col_name) |>
-    #select(empi, window, all_of(c(M_col_name)))
+    select(empi, window, L_value = result_value)
   
   # if in Z interval, document as such
   Zs <-  rel_labs |>
@@ -99,15 +92,14 @@ never_labs <- function(covar, window_num){
     filter(result_dt %within% interval(z_start, z_end)) |>
     arrange(result_dt) |>
     distinct(empi, .keep_all = T) |>
-    mutate(missing = ifelse(is.na(result_value), 1, 0)) |>
-    select(empi, window, Z_value = result_value, Z_missing = missing)
+    select(empi, window, Z_value = result_value)
 
   out <-
     nevers_clean |>
     select(empi, window) |>
     filter(window == window_num) |>
     mutate(covar = covar) |>
-    left_join(Ms) |>
+    left_join(Ls) |>
     left_join(Zs)
     
   return(out)
@@ -119,6 +111,41 @@ never_labs("ddimer", 1)
 map_grid <- expand.grid("name" = c("ddimer","potassium"), "window" = 1:28)
 map_grid
 all_labs <- map2(map_grid$name, map_grid$window, ~never_labs(.x, .y))
+
+all_labs_join_clean <- 
+  data.table::rbindlist(all_labs) |>
+  mutate(L_missing = ifelse(is.na(L_value), 1, 0),
+         Z_missing = ifelse(is.na(Z_value), 1, 0)) |>
+  mutate(L_value = ifelse(is.na(L_value), -99999, L_value),
+         Z_value = ifelse(is.na(Z_value), -99999, Z_value))
+
+all_labs_join_clean
+
+# fill in M = 0 for all the mediators (this group never gets AKI)
+# fill in A = 0 (change for oxygenation data)
+M_and_A <- 
+  nevers_clean |>
+  mutate(M = 0,
+         A = 0
+         )
+
+C_and_Y <-
+  nevers_clean |>
+  select(empi, window, l_start, z_end) |>
+  left_join(nevers |> select(empi, Y_time, Cens_time)) |>
+  mutate(Y = case_when(Y_time %within% interval(l_start, z_end) ~ 1),
+         C = case_when(Cens_time %within% interval(l_start, z_end) ~ 0,
+                       TRUE ~ 1),
+         Y = case_when(C == 0 ~ NA_real_,
+                       is.na(Y) ~ 0,
+                       TRUE ~ Y
+                       ))
+
+C_and_Y |>
+  filter(is.na(Y))
+
+M_and_A |>
+  full_join(all_labs_join_clean, relationship = "many-to-many")
 
 all_labs_names <- paste0(map_grid$window, "_", map_grid$name)
 all_labs_names
@@ -182,7 +209,7 @@ nevers_full_int <- reduce(list(nevers_l1_potassium,
                                nevers_z1_potassium,
                                nevers_z1_ddimer), ~full_join(.x,.y)) |>
   full_join(nevers) |>
-  select(empi, t1_start, t1_end, A_time, M_time, Y_time, Cens_time,
+  select(empi, t1_start, t1_end, A_time, L_time, Y_time, Cens_time,
          contains("l1"), contains("z1")
   )
 
