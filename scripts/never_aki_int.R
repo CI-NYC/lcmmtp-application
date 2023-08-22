@@ -6,7 +6,7 @@
 # setup -------------------------------------------------------------------
 
 library(tidyverse)
-library(tidylog)
+# library(tidylog)
 library(janitor)
 
 cp_dt <- read_rds(here::here("data/derived/dts_cohort.rds"))
@@ -18,7 +18,8 @@ ddimers <- labs |>
   filter(result_name == "D-Dimer") |> # all d-dimers have this
   mutate(result_dt = as_datetime(result_time),
          result_value = readr::parse_number(ord_value)) |> 
-  select(empi, result_dt, result_value)
+  select(empi, result_dt, result_value)|>
+  mutate(name = "ddimer")
 
 ddimers_nest <- ddimers |> nest(.by = empi)
 
@@ -28,10 +29,12 @@ potassium <- labs |>
   filter(result_name == "Potassium Level") |>
   mutate(result_dt = as_datetime(result_time),
          result_value = readr::parse_number(ord_value)) |> 
-  select(empi, result_dt, result_value)
+  select(empi, result_dt, result_value) |>
+  mutate(name = "potassium")
 
 potassium_nest <- potassium |> nest(.by = empi)
 
+all_labs_clean <- bind_rows(ddimers, potassium)
 
 ### Find patients who were never intubated or AKI
 nevers <-
@@ -39,12 +42,9 @@ nevers <-
   filter((is.na(A_time) & is.na(M_time)) 
   ) 
 
-nevers
-
 nevers_clean <-
   nevers |>
   nest(.by = empi) |>
-  head() |>
   mutate(data = map(data, function(x){
     x |> 
       mutate(max_time = pmax(Y_time, Cens_time, na.rm = T),
@@ -62,31 +62,23 @@ nevers_clean <-
   ) |>
   unnest(cols = data)
 
-nevers_clean[1,] |> unnest() |> view()
-
-nevers_clean
-
 nevers_clean |>
   filter(window == 1) |>
   left_join(ddimers) |>
   filter(result_dt %within% interval(m_start, z_end))
 
-x <- data.frame(a = rnorm(5))
-x |>
-  rename_at("a", ~paste0("b"))
-
-never_labs <- function(covar_df, covar_label, window_num){
+never_labs <- function(covar, window_num){
   
-  M_col_name <- paste0("M_", window_num, "_", covar_label)
-  M_miss_col_name <- paste0("M_", window_num, "_missing_", covar_label)
-  Z_col_name <- paste0("Z_", window_num, "_", covar_label)
-  Z_miss_col_name <- paste0("Z_", window_num, "_missing_", covar_label)
-  
+  # M_col_name <- paste0("M_", window_num, "_", covar_label)
+  # M_miss_col_name <- paste0("M_", window_num, "_missing_", covar_label)
+  # Z_col_name <- paste0("Z_", window_num, "_", covar_label)
+  # Z_miss_col_name <- paste0("Z_", window_num, "_missing_", covar_label)
+  # 
   # extract labs within the window of interest
   rel_labs <-
     nevers_clean |>
     filter(window == window_num) |>
-    left_join(covar_df) |>
+    left_join(all_labs_clean |> filter(name == covar)) |>
     filter(result_dt %within% interval(m_start, z_end))
   
   # if in M interval, record as such
@@ -96,9 +88,10 @@ never_labs <- function(covar_df, covar_label, window_num){
     arrange(result_dt) |>
     distinct(empi, .keep_all = T) |>
     mutate(missing = ifelse(is.na(result_value), 1, 0)) |>
-    rename_at(all_of("result_value"), ~M_col_name) |>
+    select(empi, window, M_value = result_value, M_missing = missing)
+    #rename_at(all_of("result_value"), ~M_col_name) |>
     #rename_at(all_of("missing"), ~M_miss_col_name) |>
-    select(empi, window, all_of(c(M_col_name)))
+    #select(empi, window, all_of(c(M_col_name)))
   
   # if in Z interval, document as such
   Zs <-  rel_labs |>
@@ -107,29 +100,34 @@ never_labs <- function(covar_df, covar_label, window_num){
     arrange(result_dt) |>
     distinct(empi, .keep_all = T) |>
     mutate(missing = ifelse(is.na(result_value), 1, 0)) |>
-    rename_at(all_of("result_value"), ~Z_col_name)  |>
-    # rename_at(all_of("missing"), ~Z_miss_col_name) |>
-    select(empi, window, all_of(c(Z_col_name)))
+    select(empi, window, Z_value = result_value, Z_missing = missing)
 
-    tmp <-
+  out <-
     nevers_clean |>
     select(empi, window) |>
     filter(window == window_num) |>
+    mutate(covar = covar) |>
     left_join(Ms) |>
     left_join(Zs)
-  return(tmp)
-  
-  #tmp |>
-  #  replace_na(replace_list)
-  
-# return(replace_list)
+    
+  return(out)
+
     }
 
-never_labs(ddimers, "ddim", 1)
+never_labs("ddimer", 1)
 
-all_labs <- map2(list(ddimers, potassium), list("ddimer","potassium"), ~never_labs(.x, .y, 1))
+map_grid <- expand.grid("name" = c("ddimer","potassium"), "window" = 1:28)
+map_grid
+all_labs <- map2(map_grid$name, map_grid$window, ~never_labs(.x, .y))
 
+all_labs_names <- paste0(map_grid$window, "_", map_grid$name)
+all_labs_names
+
+names(all_labs) <- all_labs_names
 all_labs
+
+data.table::rbindlist(all_labs, idcol = TRUE )
+
 
 # map(1:14, ~map2(list(ddimers, potassium), list("ddimer","potassium"), ~never_labs(.x, .y, )))
 
