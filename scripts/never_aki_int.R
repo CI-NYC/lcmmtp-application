@@ -38,8 +38,7 @@ all_labs_clean <- bind_rows(ddimers, potassium)
 ### Filter for patients who were never intubated or AKI
 nevers <-
   cp_dt |>
-  filter((is.na(A_time) & is.na(M_time)) 
-  ) 
+  filter((is.na(A_time) & is.na(M_time))) 
 
 # Clean data set for determining time window with empis, l_start, l_end, z_start, and z_end
 nevers_clean <-
@@ -117,14 +116,12 @@ Ls_and_Zs <-
   mutate(L_value = ifelse(is.na(L_value), -99999, L_value),
          Z_value = ifelse(is.na(Z_value), -99999, Z_value))
 
-
 # fill in M = 0 for all the mediators (this group never gets AKI)
 # fill in A = 0 (change for oxygenation data)
 M_and_A <- 
   nevers_clean |>
   mutate(M = 0,
-         A = 0
-         )
+         A = 0)
 
 # Note I'll probably need to carry these Y's through (deterministic)
 Ys <-
@@ -147,7 +144,6 @@ Cs <- nevers_clean |>
                        # otherwise, observed
                        TRUE ~ 1))
 
-
 # Turn into wide form data ------------------------------------------------
 
 max_window_data <- 28
@@ -158,7 +154,6 @@ M_and_A_wide <-
   pivot_wider(id_cols=empi,
               names_from = window,
               values_from = c(A,M))
-M_and_A_wide
 
 Ls_and_Zs_wide <-
   Ls_and_Zs |>
@@ -167,8 +162,6 @@ Ls_and_Zs_wide <-
   pivot_wider(id_cols=empi,
               names_from = c(window, covar),
               values_from = c(L_value, L_missing, Z_value, Z_missing))
-
-Ls_and_Zs_wide
 
 Ys_wide <-
   Ys |>
@@ -186,15 +179,11 @@ Cs_wide <-
               values_from = C,
               names_prefix = "C_")
 
-
 # merge wide data set and save data ---------------------------------------
 
 nevers_wide <-
-  nevers_clean |>
-  left_join(M_and_A_wide) |>
-  left_join(Ls_and_Zs_wide) |>
-  left_join(Ys_wide) |>
-  left_join(Cs_wide) 
+  reduce(list(nevers_clean, M_and_A_wide, Ls_and_Zs_wide, Ys_wide, Cs_wide),
+  ~left_join(.x, .y))
 
 saveRDS(nevers_wide, here::here("data/derived/nevers_wide.rds"))
 
