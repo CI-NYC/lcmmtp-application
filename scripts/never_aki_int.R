@@ -10,30 +10,9 @@ library(tidyverse)
 library(janitor)
 
 cp_dt <- read_rds(here::here("data/derived/dts_cohort.rds"))
-labs <- read_rds(here::here("data", "raw", "2020-08-17", "wcm_labs_filtered.rds"))
-
-### TO SWITCH OUT:
-# Make this one long cleaned lab list
-
-### All d-dimers, all pts
-ddimers <- labs |>
-  as_tibble() |>
-  filter(result_name == "D-Dimer") |> # all d-dimers have this
-  mutate(result_dt = as_datetime(result_time),
-         result_value = readr::parse_number(ord_value)) |> 
-  select(empi, result_dt, result_value)|>
-  mutate(name = "ddimer")
-
-### All potassium, all pts
-potassium <- labs |>
-  as_tibble() |>
-  filter(result_name == "Potassium Level") |>
-  mutate(result_dt = as_datetime(result_time),
-         result_value = readr::parse_number(ord_value)) |> 
-  select(empi, result_dt, result_value) |>
-  mutate(name = "potassium")
-
-all_labs_clean <- bind_rows(ddimers, potassium)
+#labs <- read_rds(here::here("data", "raw", "2020-08-17", "wcm_labs_filtered.rds"))
+all_labs_clean <- read_rds(here::here("data/derived/all_labs_clean.rds")) |>
+  mutate(name = snakecase::to_snake_case(name))
 
 ### Filter for patients who were never intubated or AKI
 nevers <-
@@ -105,15 +84,19 @@ never_labs <- function(covar, window_num){
     }
 
 # Create a grid of all covariates and time windows to map through
-map_grid <- expand.grid("name" = c("ddimer","potassium"), "window" = 1:28)
+map_grid <- expand.grid("name" = unique(all_labs_clean$name), "window" = 1:28)
 all_labs <- map2(map_grid$name, map_grid$window, ~never_labs(.x, .y))
 
 # put together all L_t and Z_t in long format and create missingness indicators
 Ls_and_Zs <- 
-  data.table::rbindlist(all_labs) |>
-  mutate(L_missing = ifelse(is.na(L_value), 1, 0),
+  data.table::rbindlist(all_labs) |> # bind all rows together
+  mutate(covar = snakecase::to_snake_case(as.character(covar))) |> # clean up covariate names for wide col names later
+  mutate(L_missing = ifelse(is.na(L_value), 1, 0), # create indicators for missing L and Z
          Z_missing = ifelse(is.na(Z_value), 1, 0)) |>
-  mutate(L_value = ifelse(is.na(L_value), -99999, L_value),
+  group_by(empi, covar) |> 
+  arrange(empi, window) |>
+  fill(L_value, Z_value, .direction = "down") |> # Last Observation Carried Forward, by empi and covariate
+  mutate(L_value = ifelse(is.na(L_value), -99999, L_value), # if no observations before, fill in with -99999 (could switch to median value)
          Z_value = ifelse(is.na(Z_value), -99999, Z_value))
 
 # fill in M = 0 for all the mediators (this group never gets AKI)
