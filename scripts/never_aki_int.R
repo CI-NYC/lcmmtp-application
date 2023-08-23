@@ -41,7 +41,7 @@ nevers <-
   filter((is.na(A_time) & is.na(M_time)) 
   ) 
 
-# 
+# Clean data set for determining time window with empis, l_start, l_end, z_start, and z_end
 nevers_clean <-
   nevers |>
   nest(.by = empi) |>
@@ -57,16 +57,16 @@ nevers_clean <-
              l_end = l_start + hours(12) - seconds(1),
              z_start = l_start + hours(12),
              z_end = l_start + days(1) - seconds(1)) |>
-      select(window, l_start, l_end, z_start, z_end)
+      select(window, l_start, l_end, z_start, z_end) |>
+      filter(window != 0) # filter out two windows that are 0 due to time ordering issues
   }) 
   ) |>
   unnest(cols = data)
 
-nevers_clean |>
-  filter(window == 1) |>
-  left_join(ddimers) |>
-  filter(result_dt %within% interval(l_start, z_end))
-
+# A function to define L_t and Z_t by covariate
+# arguemnt covar is a string containing lab name, eg "ddimer"
+# window_num indicates what t we're determining
+# returns a list for every time point and L_t and Z_t values
 never_labs <- function(covar, window_num){
   
   # extract labs within the window of interest
@@ -105,12 +105,11 @@ never_labs <- function(covar, window_num){
 
     }
 
-never_labs("ddimer", 1)
-
+# Create a grid of all covariates and time windows to map through
 map_grid <- expand.grid("name" = c("ddimer","potassium"), "window" = 1:28)
-map_grid
 all_labs <- map2(map_grid$name, map_grid$window, ~never_labs(.x, .y))
 
+# put together all L_t and Z_t in long format and create missingness indicators
 Ls_and_Zs <- 
   data.table::rbindlist(all_labs) |>
   mutate(L_missing = ifelse(is.na(L_value), 1, 0),
@@ -147,3 +146,56 @@ Cs <- nevers_clean |>
   mutate(C = case_when(Cens_time %within% interval(l_start, z_end) ~ 0,
                        # otherwise, observed
                        TRUE ~ 1))
+
+
+# Turn into wide form data ------------------------------------------------
+
+max_window_data <- 28
+
+M_and_A_wide <- 
+  M_and_A |>
+  filter(window < max_window_data) |>
+  pivot_wider(id_cols=empi,
+              names_from = window,
+              values_from = c(A,M))
+M_and_A_wide
+
+Ls_and_Zs_wide <-
+  Ls_and_Zs |>
+  filter(window < max_window_data) |>
+  as_tibble() |>
+  pivot_wider(id_cols=empi,
+              names_from = c(window, covar),
+              values_from = c(L_value, L_missing, Z_value, Z_missing))
+
+Ls_and_Zs_wide
+
+Ys_wide <-
+  Ys |>
+  filter(window < max_window_data) |>
+  pivot_wider(id_cols=empi,
+              names_from = window,
+              values_from = Y,
+              names_prefix = "Y_")
+
+Cs_wide <-
+  Cs |>
+  filter(window < max_window_data) |>
+  pivot_wider(id_cols=empi,
+              names_from = window,
+              values_from = C,
+              names_prefix = "C_")
+
+
+# merge wide data set and save data ---------------------------------------
+
+nevers_wide <-
+  nevers_clean |>
+  left_join(M_and_A_wide) |>
+  left_join(Ls_and_Zs_wide) |>
+  left_join(Ys_wide) |>
+  left_join(Cs_wide) 
+
+saveRDS(nevers_wide, here::here("data/derived/nevers_wide.rds"))
+
+
