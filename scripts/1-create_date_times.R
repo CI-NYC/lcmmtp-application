@@ -1,4 +1,9 @@
-#### Crude code to test out one time point for temporality logic
+#######################################################
+#######################################################
+### Create relevant date-times for computing necessary variables L_t, A_t, Z_t, M_t, C_t, Y_t
+### Kat Hoffman
+#######################################################
+#######################################################
 
 library(tidyverse)
 

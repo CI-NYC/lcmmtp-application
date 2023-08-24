@@ -1,5 +1,10 @@
-# Create cohort
-  
+#######################################################
+#######################################################
+### Create cohort, apply eligibility criteria
+### Kat Hoffman
+#######################################################
+#######################################################
+
 library(lubridate)
 library(tictoc)
 library(dtplyr)
@@ -19,16 +24,15 @@ redcap_raw <-
   read_rds(here::here(file_path, "wcm_redcap_data.rds")) %>%
   drop_na(empi)
 
-
 aki <- read_rds(here::here("data/derived/kh_aki.rds"))
 tz(aki$aki_time) <- "America/New_York"
-
 
 # Apply inclusion criteria:
 #   
 #   1. Adult COVID-19 positive patients
 #   2. Admitted to LMH, WCM, or Queens hospital (not just ED) and if admitted more than once, we keep their first visit.
 #   3. Data available in the Data Lake from beginning of ED admission (i.e. not a transfer into the system)
+#   4. No CKD or ESRD
 
 redcap <-
   redcap_raw %>%
@@ -93,7 +97,7 @@ redcap <-
          # did patient discharge/transfer to outside hospital/die? if not, chart review is last follow up (fu) date
          end_dt = pmin(discharge_dt, death_dt, na.rm=T),
          end_dt = case_when(is.na(end_dt) ~ last_fu_dt, TRUE ~ end_dt)) %>%
-  # inclusion: everyone admitted
+  # inclusion: all patients admitted to the hospital
   filter(age >= 18,
     admit == "Yes",
     #pregnancy != "Yes",
@@ -105,8 +109,7 @@ redcap <-
   mutate(day_death = ceiling(time_length(difftime(death_dt, ed_adm_dt), unit="day"))) %>%
   ungroup()
 
-
-# Exclusion criteria
+# apply CKD exclusion criteria --------------------------------------------
 
 # remove pts with ckd or esrd already
 cohort <-
@@ -114,15 +117,5 @@ cohort <-
   filter(ckd_or_esrd == "No") |>
   left_join(aki)
 
-cohort |>
-  mutate(days_to_aki = time_length(difftime(aki_time, ed_adm_dt), unit="days")) |>
-  mutate(days_to_death = time_length(difftime(death_dt, ed_adm_dt), unit="days")) |>
-  filter(days_to_aki > .5 | is.na(days_to_aki)) |>
-  filter(days_to_death > .5 | is.na(days_to_death))
-
-
 # save data
 saveRDS(cohort, here::here("data","derived","hospitalized_cohort_with_queens.rds"))
-
-cohort
-
