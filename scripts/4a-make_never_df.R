@@ -9,6 +9,8 @@ library(tidyverse)
 # library(tidylog)
 library(janitor)
 
+source(here::here("scripts/0-functions.R"))
+
 cp_dt <- read_rds(here::here("data/derived/dts_cohort.rds"))
 #labs <- read_rds(here::here("data", "raw", "2020-08-17", "wcm_labs_filtered.rds"))
 all_labs_clean <- read_rds(here::here("data/derived/all_labs_clean.rds")) |>
@@ -41,51 +43,9 @@ nevers_clean <-
   ) |>
   unnest(cols = data)
 
-# A function to define L_t and Z_t by covariate
-# arguemnt covar is a string containing lab name, eg "ddimer"
-# window_num indicates what t we're determining
-# returns a list for every time point and L_t and Z_t values
-never_labs <- function(covar, window_num){
-  
-  # extract labs within the window of interest
-  rel_labs <-
-    nevers_clean |>
-    filter(window == window_num) |>
-    left_join(all_labs_clean |> filter(name == covar)) |>
-    filter(result_dt %within% interval(l_start, z_end))
-  
-  # if in L interval, record as such
-  Ls <- rel_labs |>
-    drop_na(result_value) |>
-    filter(result_dt %within% interval(l_start, l_end)) |>
-    arrange(result_dt) |>
-    distinct(empi, .keep_all = T) |>
-    mutate(missing = ifelse(is.na(result_value), 1, 0)) |>
-    select(empi, window, L_value = result_value)
-  
-  # if in Z interval, document as such
-  Zs <-  rel_labs |>
-    drop_na(result_value) |>
-    filter(result_dt %within% interval(z_start, z_end)) |>
-    arrange(result_dt) |>
-    distinct(empi, .keep_all = T) |>
-    select(empi, window, Z_value = result_value)
-
-  out <-
-    nevers_clean |>
-    select(empi, window) |>
-    filter(window == window_num) |>
-    mutate(covar = covar) |>
-    left_join(Ls) |>
-    left_join(Zs)
-    
-  return(out)
-
-    }
-
 # Create a grid of all covariates and time windows to map through
 map_grid <- expand.grid("name" = unique(all_labs_clean$name), "window" = 1:28)
-all_labs <- map2(map_grid$name, map_grid$window, ~never_labs(.x, .y))
+all_labs <- map2(map_grid$name, map_grid$window, ~divide_labs(nevers_clean, .x, .y))
 
 # put together all L_t and Z_t in long format and create missingness indicators
 Ls_and_Zs <- 
@@ -136,7 +96,7 @@ M_and_A_wide <-
   filter(window < max_window_data) |>
   pivot_wider(id_cols=empi,
               names_from = window,
-              values_from = c(A,M))
+              values_from = c(A, M))
 
 Ls_and_Zs_wide <-
   Ls_and_Zs |>
