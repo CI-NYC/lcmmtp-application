@@ -22,43 +22,48 @@ intubated_first <-
 
 ### CREATE 24 HOUR PERIODS FROM ATIME TO T START
 ### THEN ATIME TO max time
+  
 
-# Clean data set for determining time window with empis, l_start, l_end, z_start, and z_end
-intubated_first_clean <-
+
+create_periods  <- function(empi, t1_start, A_time, max_window_int, max_time, max_window_after_int){
+  
+  max_window_int <- max_window_int + 1
+  
+  periods_before <- 
+    seq.POSIXt(from = t1_start, to = A_time, length.out = max_window_int) |>
+    as_tibble() |>
+    mutate(empi = empi)
+
+  max_window_after_int <- max_window_after_int + 1
+  
+  periods_after <-
+    seq.POSIXt(from = A_time, to = max_time, length.out = max_window_after_int) |>
+    as_tibble() |>
+    mutate(empi = empi)
+  
+  out <- full_join(periods_before, periods_after) |> select(empi, l_start = value)
+
+  }
+
+# go backwards to create intervals until t1_start
+windows_before_intubation <-
   intubated_first |>
-  nest(.by = empi) |>
   head() |>
-  mutate(data = map(data, function(x){
-    x |> 
-      mutate(max_time = pmax(Y_time, Cens_time, na.rm = T),
-             max_windows = difftime(max_time, t1_start),
-             window = 1
-      ) |>
-      complete(window = 1:ceiling(max_windows)) |>
-      fill(A_time, t1_start) |>
-      mutate(tmp_l_start = t1_start + days(window - 1),
-             tmp_z_end = tmp_l_start + days(1) - seconds(1),
-             A_this_window = case_when(A_time %within% interval(tmp_l_start, tmp_z_end) ~ 1, TRUE ~ 0),
-             int_window = case_when(A_this_window == 1 ~ window)) |>
-    fill(int_window, .direction = "downup") |>
-    complete(rev_days_to_int = int_window:1) # |>
-      #mutate(l_start = case_when(A_this_window == 1 ~ A_time,
-      #                           tmp_l_start < A_time ~ A_time - days(rev_days_to_int - 1)))
-      # select(window, l_start, l_end, z_start, z_end) |>
-      # filter(window != 0) # filter out two windows that are 0 due to time ordering issues
-  }) 
-  ) |>
-  unnest(cols = data)
+  mutate(max_time = pmax(Y_time, Cens_time, na.rm = T),
+         max_windows = ceiling(as.numeric(difftime(max_time, t1_start, units = "days"))),
+         max_window_int = ceiling(as.numeric(difftime(A_time, t1_start, units = "days"))),
+         max_window_after_int = ceiling(as.numeric(difftime(max_time, A_time, units = "days"))),
+         max_window_study_end = ceiling(as.numeric(difftime(max_time, t1_start, units = "days"))),
+         window = 1) |> 
+  select(empi, t1_start, A_time, max_window_int, max_time, max_window_after_int) |>
+  pmap_dfr(create_periods)
 
-intubated_first_clean |>
-  view()
-
-
-intubated_first_clean |>
- 
-  filter(A_time %within% interval())
-
-
+windows_before_intubation |>
+  group_by(empi) |>
+  mutate(z_end = lead(l_start)) |>
+  drop_na(z_end) |>
+  mutate(z_end = case_when(row_number() == n() ~ z_end,
+                           TRUE ~ z_end - seconds(1)))
 
 # Clean data set for determining time window with empis, l_start, l_end, z_start, and z_end
 nevers_clean <-
