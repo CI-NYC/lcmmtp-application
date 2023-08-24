@@ -96,6 +96,7 @@ aki_windows_clean <-
   full_join(aki_windows_mod) |> # add modified rows (from above) into final clean data
   arrange(index)
 
+aki_windows_clean
 
 # Create a grid of all covariates and time windows to map through
 map_grid <- expand.grid("name" = unique(all_labs_clean$name), "window" = 1:28)
@@ -104,7 +105,6 @@ all_labs <- map2(map_grid$name, map_grid$window, ~divide_labs(aki_windows_clean,
 # put together all L_t and Z_t in long format and create missingness indicators
 Ls_and_Zs <- 
   data.table::rbindlist(all_labs) |> # bind all rows together
-  mutate(covar = snakecase::to_snake_case(as.character(covar))) |> # clean up covariate names for wide col names later
   mutate(L_missing = ifelse(is.na(L_value), 1, 0), # create indicators for missing L and Z
          Z_missing = ifelse(is.na(Z_value), 1, 0)) |>
   group_by(empi, covar) |> 
@@ -113,44 +113,44 @@ Ls_and_Zs <-
   mutate(L_value = ifelse(is.na(L_value), -99999, L_value), # if no observations before, fill in with -99999 (could switch to median value)
          Z_value = ifelse(is.na(Z_value), -99999, Z_value))
 
-As <-
-  aki_windows_clean |>
-  left_join(aki_first |> select(empi, A_time)) |>
-  left_join(Ms) |>
-  mutate(A = case_when(is.na(A_time) ~ 0, # never intubated
-                       A_time < l_start ~ 0,
-                       A_time >= l_start ~ 1))
-
 
 # fill in M = 1 for all the windows where intubation occurs on or after
 # need to update this for different levels of supp o2 later
 Ms <- 
   aki_windows_tmp |>
-  left_join(aki_first |> sselect(empi, M_time)) |>
-  # select(empi, z_end, M_time)
+  left_join(aki_first |> select(empi, M_time)) |>
   mutate(M_this_window = case_when(M_time == z_end ~ window)) |> # mark which window AKI occurs in (it's the end of the Z interval)
   fill(M_this_window, .direction = "downup") |>
   mutate(M = case_when(window >= M_this_window ~ 1, TRUE ~ 0)) |>
   select(empi, window, M_this_window, M)
 
+# mark which window intubation occurred --> switch to intubation = 2 later
+As <-
+  aki_windows_clean |>
+  left_join(aki_first |> select(empi, A_time)) |>
+  left_join(Ms) |>
+  mutate(A = case_when(is.na(A_time) ~ 0, # never intubated
+                       l_start < A_time ~ 0,
+                       l_start >= A_time ~ 1)) 
+
 # Note I'll probably need to carry these Y's through (deterministic)
 Ys <-
-  nevers_clean |>
+  aki_windows_clean |>
   select(empi, window, l_start, z_end) |>
-  left_join(nevers |> select(empi, Y_time, Cens_time)) |>
+  left_join(aki_first |> select(empi, Y_time, Cens_time)) |>
   # if died in this period, outcome Y is 1
-  mutate(Y = case_when(Y_time %within% interval(l_start, z_end) ~ 1,
+  mutate(Y = case_when(Y_time == z_end ~ 1,
                        # if they were discharged in this period, no outcome observed (NA)
-                       Cens_time %within% interval(l_start, z_end) ~ NA_real_,
+                       Cens_time == z_end ~ NA_real_,
                        # otherwise, outcome is 0
                        TRUE ~ 0))
 
 # Note I'll need to fill in the rest of the censoring variables as 0 (or leave as NA?) once in long format
-Cs <- nevers_clean |>
+Cs <- aki_windows_clean |>
   select(empi, window, l_start, z_end) |>
-  left_join(nevers |> select(empi, Y_time, Cens_time)) |>
+  left_join(aki_first |> select(empi, Y_time, Cens_time)) |>
   # if they were discharged in this period, no outcome observed
-  mutate(C = case_when(Cens_time %within% interval(l_start, z_end) ~ 0,
+  mutate(C = case_when(Cens_time == z_end ~ 0,
                        # otherwise, observed
                        TRUE ~ 1))
 
@@ -158,12 +158,19 @@ Cs <- nevers_clean |>
 
 max_window_data <- 28
 
-M_and_A_wide <- 
-  M_and_A |>
+M_wide <- 
+  Ms |>
   filter(window < max_window_data) |>
   pivot_wider(id_cols=empi,
               names_from = window,
-              values_from = c(A,M))
+              values_from = M)
+
+A_wide <- 
+  As |>
+  filter(window < max_window_data) |>
+  pivot_wider(id_cols=empi,
+              names_from = window,
+              values_from = A)
 
 Ls_and_Zs_wide <-
   Ls_and_Zs |>
@@ -191,10 +198,10 @@ Cs_wide <-
 
 # merge wide data set and save data ---------------------------------------
 
-nevers_wide <-
-  reduce(list(nevers_clean, M_and_A_wide, Ls_and_Zs_wide, Ys_wide, Cs_wide),
+aki_first_wide <-
+  reduce(list(aki_first, Ms, As, Ls_and_Zs_wide, Ys_wide, Cs_wide),
   ~left_join(.x, .y))
 
-saveRDS(nevers_wide, here::here("data/derived/nevers_wide.rds"))
+saveRDS(aki_first_wide, here::here("data/derived/aki_first_wide.rds"))
 
 
