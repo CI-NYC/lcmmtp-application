@@ -2,9 +2,7 @@
 
 Code to analyze the direct and indirect effects through acute kidney injury (AKI) of a delay in intubation policy on COVID-19 mortality using the [`lcmmtp`](github.com/nt-williams/lcmmtp) R package.
 
-## Data structure creation
-
-![](img/data_structure.png)
+## Data cleaning
 
 1. First, we filtered for cohort eligibility criteria (e.g. age >= 18, no chronic kidney disease) in `scripts/0_create_cohort.R`.
 
@@ -24,7 +22,17 @@ At this step we also filtered out <0.6% of patients with non-sensical date-times
 
 3. Next, we created variables `window`, `l_start`, `l_end`, `z_start`, and `z_end` to indicate what the date-time should be for each time window $t$ and random variable $L$ and $Z$. To enforce temporality in the time-discretized data structure, intervals depended on whether the patient was intubated (before AKI, if applicable), met AKI criteria (before intubation, if applicable), or was neither intubated nor met AKI criteria during the study follow up.
 
+![](img/data_structure.png)
+
 ### Time intervals for patients who **never** were intubated nor met criteria for AKI:
 
-Time windows were created by sequencing `t1_start` (the date-time beginning of $L_1$ variables) to the maximum time (`max_time`) in the study (i.e. `Y_time` or `Cens_time`) in as close to 24 hour intervals as possible. The start of each sequence was `l_start` and the end of each sequence was `z_end`, where `z_end` was the next window's `l_start` value with 1 second removed. The midpoint of `l_start` and `z_end` was determined and `l_end` (end of $L_t$) and `z_start` (start of $Z_t$) were created, again differing by 1 second each.
+- Time windows were created by sequencing `t1_start` (the date-time beginning of $L_1$ variables) to the maximum time (`max_time`) in the study (i.e. `Y_time` or `Cens_time`) in as close to 24 hour intervals as possible.
+- The start of each sequence was `l_start` and the end of each sequence was `z_end`, where `z_end` was the next window's `l_start` value with 1 second removed.
+- The midpoint of `l_start` and `z_end` was determined and `l_end` (end of $L_t$) and `z_start` (start of $Z_t$) were created, again differing by 1 second each.
+
+### Time intervals for patients who met criteria for AKI before being intubated, or who were never intubated:
+
+- Time windows were created by first sequencing `t1_start` to the time that AKI criteria was met (`M_time`) in as close to 24 hour intervals as possible. Then, `M_time` until `max_time` was sequenced in as close to 24 hour intervals as possible.
+- The start of each sequence was `l_start` and the end of each sequence was `z_end`, where one of the `z_end` values corresponded to the exact time the patient met AKI criteria. This ensured that all variables measured in $Z_k$, where $k$ indicates the interval in which AKI occurred (i.e. $M_k=1$) were measured before the mediator. It also ensures that all variables in the next $L$, i.e. $L_{k+1}$ are measured after the mediator.
+- In the
 
