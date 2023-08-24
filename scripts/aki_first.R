@@ -76,15 +76,27 @@ aki_windows_tmp <- aki_windows |>
   ungroup() |>
   mutate(index = row_number()) # to modify intervals in which intubation occurs in next lines
 
-### THIS IS ACTUALLY WRONG IT IS THE LOGIC NEEDED TO MODIFY FOR AKI AFTER INTUBATION
-# filter to windows in which intubation occurs (at some point after AKI)
-# modify z start and l end to reflect this A_time
-aki_windows_mod <- 
+
+# fill in M = 1 for all the windows where intubation occurs on or after
+# need to update this for different levels of supp o2 later
+Ms <- 
   aki_windows_tmp |>
-    left_join(aki_first |> select(empi, A_time)) |>
-    drop_na(A_time) |>
-    filter(A_time %within% interval(l_start, z_end)) |>
-    mutate(z_start = A_time, 
+  left_join(aki_first |> sselect(empi, M_time)) |>
+  # select(empi, z_end, M_time)
+  mutate(M_this_window = case_when(M_time == z_end ~ window)) |> # mark which window AKI occurs in (it's the end of the Z interval)
+  fill(M_this_window, .direction = "downup") |>
+  mutate(M = case_when(window >= M_this_window ~ 1, TRUE ~ 0)) |>
+  select(empi, window, M_this_window, M)
+
+# aki_windows_mod <- 
+  aki_windows_tmp |>
+  left_join(aki_first |> select(empi, A_time, M_time)) |>
+  left_join(Ms) |>
+  drop_na(A_time) |>
+  filter(A_time %within% interval(l_start, z_end)) |>
+    select(empi, window, M_this_window, A_time, l_start, z_end)
+  # filter(A_time %within% interval(l_start, z_end)) |>
+  mutate(l_start = A_time, 
          l_end = z_start - seconds(1)) |>
   select(-A_time)
 
@@ -93,6 +105,24 @@ aki_windows_clean <-
   filter(!(index %in% aki_windows_mod$index)) |>
   full_join(aki_windows_mod) |>
   arrange(index) 
+
+### THIS IS ACTUALLY WRONG IT IS THE LOGIC NEEDED TO MODIFY FOR AKI AFTER INTUBATION
+# filter to windows in which intubation occurs (at some point after AKI)
+# modify z start and l end to reflect this A_time
+# aki_windows_mod <- 
+#   aki_windows_tmp |>
+#     left_join(aki_first |> select(empi, A_time)) |>
+#     drop_na(A_time) |>
+#     filter(A_time %within% interval(l_start, z_end)) |>
+#     mutate(z_start = A_time, 
+#          l_end = z_start - seconds(1)) |>
+#   select(-A_time)
+# 
+# aki_windows_clean <-
+#   aki_windows_tmp |>
+#   filter(!(index %in% aki_windows_mod$index)) |>
+#   full_join(aki_windows_mod) |>
+#   arrange(index) 
 
 # A function to define L_t and Z_t by covariate
 # argument covar is a string containing lab name, eg "ddimer"
@@ -151,17 +181,6 @@ Ls_and_Zs <-
   fill(L_value, Z_value, .direction = "down") |> # Last Observation Carried Forward, by empi and covariate
   mutate(L_value = ifelse(is.na(L_value), -99999, L_value), # if no observations before, fill in with -99999 (could switch to median value)
          Z_value = ifelse(is.na(Z_value), -99999, Z_value))
-
-# fill in M = 1 for all the windows where intubation occurs on or after
-# need to update this for different levels of supp o2 later
-Ms <- 
-  aki_windows_clean |>
-  left_join(aki_first |> select(empi, M_time)) |>
-  # select(empi, z_end, M_time)
-  mutate(M_this_window = case_when(M_time == z_end ~ window)) |> # mark which window AKI occurs in (it's the end of the Z interval)
-  fill(M_this_window, .direction = "downup") |>
-  mutate(M = case_when(window >= M_this_window ~ 1, TRUE ~ 0)) |>
-  select(empi, window, M_this_window, M)
 
 As <-
   aki_windows_clean |>
