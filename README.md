@@ -4,7 +4,7 @@ Code to analyze the direct and indirect effects through acute kidney injury (AKI
 
 ## Data structure creation
 
-![img/data_structure.png]
+![](img/data_structure.png)
 
 1. First, we filtered for cohort eligibility criteria (e.g. age >= 18, no chronic kidney disease) in `scripts/0_create_cohort.R`.
 
