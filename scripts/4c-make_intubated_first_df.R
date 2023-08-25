@@ -17,81 +17,75 @@ all_labs_clean <- read_rds(here::here("data/derived/all_labs_clean.rds")) |>
 ### Find patients for whom intubated before AKI (A_t < M_t)
 int_first <- 
   cp_dt |>
-  filter(A_time < M_time | (!is.na(A_time) & is.na(M_time))) |>
-  filter(A_time >= t1_start)
+  filter(A_time < M_time | (!is.na(A_time) & is.na(M_time)))
 
 # Function to create periods based on intubation (A_time)
 # Finds the time of intubation and creates intervals in approximately 12 hour intervals from study start date
 # Then makes intervals to max time in approximately 12 hour intervals
-# Number of intervals is determined by the number of intervals there would be if the patient had had their time divided by true 12 hour intervals (like the never group)
-create_periods  <- function(empi, t1_start, A_time, max_window_int, max_time, max_window_after_int){
-  
-  max_window_int <- max_window_int + 1 # need to make a start/stop sequence that is 1 longer than the desired number of time windows 
+# Number of  intervals is determined by the number of intervals there would be if the patient had had their time divided by true 12 hour intervals (like the never group)
+create_periods  <- function(empi, t1_start, A_time, windows_12h_to_int_odd, max_time, windows_12h_to_end_odd){
+
+  windows_12h_to_int_odd <- windows_12h_to_int_odd + 1 # need to make a start/stop sequence that is 1 longer than the desired number of time windows 
   
   # divide up study start time to time of intubation into equal intervals
   periods_before <- 
-    seq.POSIXt(from = t1_start, to = A_time, length.out = max_window_int) |>
+    seq.POSIXt(from = t1_start, to = A_time, length.out = windows_12h_to_int_odd) |>
     as_tibble() |>
     mutate(empi = empi)
   
-  max_window_after_int <- max_window_after_int + 1 # need to make a start/stop sequence that is 1 longer than the desired number of time windows 
+  windows_12h_to_end_odd <- windows_12h_to_end_odd + 1 # need to make a start/stop sequence that is 1 longer than the desired number of time windows 
   
   # divide up time of intubation to end of study follow up into equal intervals
   periods_after <-
-    seq.POSIXt(from = A_time, to = max_time, length.out = max_window_after_int) |>
+    seq.POSIXt(from = A_time, to = max_time, length.out = windows_12h_to_end_odd) |>
     as_tibble() |>
     mutate(empi = empi)
-  
-  # return the unique sequence of times; these are our start times for each L window
+
+  # return the entire data frame of l and z start/end times for that patient
   out <- full_join(periods_before, periods_after) |>
     mutate(l_or_z = case_when(row_number() %% 2 == 0 ~ "z_start",
+                              row_number() == n() ~ "z_end",
                               TRUE ~ "l_start"
     )) |>
-    pivot_wider(names_from = "l_or_z",
+    groupdata2::group(n=2, method="greedy", col_name = "window") |>
+    ungroup() |>
+    mutate(window = case_when(row_number() == n() ~ max(as.numeric(window)) - 1,
+                              TRUE ~ as.numeric(window))) |>
+    pivot_wider(id_cols = c(empi, window),
+                names_from = "l_or_z",
                 values_from = "value",
-                values_fn = list) |>
-    unnest(c(l_start, z_start))  |>
-    mutate(window = row_number())
+                values_fill = NA) |>
+    unnest(c(l_start, z_start, z_end)) |>
+    mutate(z_end = case_when(!is.na(z_end) ~ z_end, # last z_end stays as max_time
+                             TRUE ~ lead(l_start) - seconds(1)), # otherwise one second before the next l_start
+           l_end = z_start - seconds(1) # l ends one second before z starts
+           ) |>
+    select(empi, window, l_start, l_end, z_start, z_end)
     
-  return(out)
+  return(out) # data frame with l/z start and end for one patient
   
 }
 
-# safe_create_periods <- safely(create_periods)
-
-# create intervals using above function (with pmap)
+# create Z/L intervals using above create_periods function (with pmap) - takes 53 seconds
 int_windows <-
   int_first |>
-  head() |>
-  mutate(max_time = pmax(Y_time, Cens_time, na.rm = T),
-         max_windows = ceiling(as.numeric(difftime(max_time, t1_start, units = "days"))), # get max number of 24 hour windows
-         max_window_int = round(as.numeric(difftime(A_time, t1_start, units = "days")))*2, # get closest number of 12 hour windows
-         max_window_after_int = round(as.numeric(difftime(max_time, A_time, units = "days")))*2, # get closest number of 12 hour windows
-         max_window_study_end = round(as.numeric(difftime(max_time, t1_start, units = "days"))*2), # get closest number of 12hour windows
-         window = 1) |>  
-  mutate(max_window_int = case_when(max_window_int %% 2 == 0 ~ max_window_int - 1, TRUE ~ max_window_int),
-         max_window_after_int = case_when(max_window_after_int %% 2 == 0 ~ max_window_after_int , TRUE ~ max_window_after_int)) |>
-  select(empi, t1_start, A_time, max_window_int, max_time, max_window_after_int) |>
+  mutate(max_windows = ceiling(as.numeric(difftime(max_time, t1_start, units = "days"))),
+         # divide into nearest odd 12-hours periods between study start and intubation (and then intubation to max_time), so that A_t falls at the end of L_t and the start of Z_t
+         windows_12h_to_int = round(as.numeric(difftime(A_time, t1_start, units = "hours"))/12),
+         windows_12h_to_int_odd = case_when(windows_12h_to_int == 0 ~ 1, # if closest interval is 0, then make this 1 window
+                                            windows_12h_to_int %% 2 == 0 ~ windows_12h_to_int - 1,
+                                            TRUE ~ windows_12h_to_int),
+         windows_12h_to_end = round(as.numeric(difftime(max_time, A_time, units = "hours"))/12),
+         windows_12h_to_end_odd = case_when(windows_12h_to_end == 0 ~ 1, # if closest interval is 0, then make this 1 window
+                                            windows_12h_to_end %% 2 == 0 ~ windows_12h_to_end - 1,
+                                            TRUE ~ windows_12h_to_end),
+  ) |>
+  select(empi, t1_start, A_time, windows_12h_to_int_odd, max_time, windows_12h_to_end_odd) |>
   pmap_dfr(create_periods)
 
-# Testing - need to round to closest ODD number of windows for this code to work
-int_first |>
-  head() |>
-  mutate(max_time = pmax(Y_time, Cens_time, na.rm = T),
-         max_windows = ceiling(as.numeric(difftime(max_time, t1_start, units = "days"))), # get max number of 24 hour windows
-         max_window_int = round(as.numeric(difftime(A_time, t1_start, units = "days")))*2, # get closest number of 12 hour windows
-         max_window_after_int = round(as.numeric(difftime(max_time, A_time, units = "days")))*2, # get closest number of 12 hour windows
-         max_window_study_end = round(as.numeric(difftime(max_time, t1_start, units = "days"))*2), # get closest number of 12hour windows
-         window = 1) |>  
-  mutate(max_window_int = case_when(max_window_int %% 2 == 0 ~ max_window_int - 1, TRUE ~ max_window_int),
-         max_window_after_int = case_when(max_window_after_int %% 2 == 0 ~ max_window_after_int - 1, TRUE ~ max_window_after_int)) |>
-  select(empi, t1_start, A_time, max_window_int, max_time, max_window_after_int) |>
-  filter(row_number() == 3)
-
-
 # temporary data frame containing empi, window, l_start, l_end, z_start, z_end where l's and z's are dividied into equal intervals
-# need to fix in next step for the n=86 intervals in which patients get intubated during that time period (so that L's come before and Z's come after intubation for that time period only)
-aki_windows_tmp <- aki_windows |>
+# need to fix in next step for the n=XX intervals in which patients get AKI during that time period (so that Z ends at time of AKI and a new L starts)
+int_windows_tmp <- int_windows |>
   group_by(empi) |>
   mutate(z_end = lead(l_start)) |>
   drop_na(z_end) |>
