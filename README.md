@@ -48,3 +48,9 @@ To enforce temporality in the time-discretized data structure, intervals depende
 - The start of each sequence was `l_start` and the end of each sequence was `z_end`, where one of the `z_end` values corresponded to the exact time the patient met AKI criteria. This ensured that all variables measured in $Z_k$ (where $k$ indicates the interval in which AKI occurred (i.e. $M_k=1$)) were measured before the mediator. It also ensured that all variables in the next $L$, i.e. $L_{k+1}$, were measured after the mediator.
 - Some patients who met criteria for AKI were intubated later. To ensure correct temporality, i.e. that $L_j$ occurred before $A_j$ and $Z_j$ occurred after $A_j$, where $j$ is the time window in which the patient was intubated, the `l_end` and `z_start` variables for the time window in which intubation occurred were modified to reflect the time of intubation, rather than the midpoint of `l_start` and `z_end`.
 
+### Time intervals for patients who were intubated before meeting criteria for AKI, or who never met criteria for AKI:
+
+- Time windows were created by first sequencing `t1_start` to the time that intubation was met (`A_time`) in as close to 12 hour intervals as possible. Then, `A_time` until `max_time` was sequenced in as close to 12 hour intervals as possible. The 12 hour intervals were sequenced because `A_time` needed to have $L_t$ variables before it, and $Z_t$ variables after it. Put another way, $A_t$ falls in the middle of a 24 hour interval $t$.
+- Every *odd* date-time in the above sequence was called `l_start` and every *even* date-time in the sequence was called `z_start`.
+
+
