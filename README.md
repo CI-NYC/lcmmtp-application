@@ -67,4 +67,6 @@ To enforce temporality in the time-discretized data structure, intervals depende
 
 - `M_t` : 
 
-- `Cens_t` : A censoring indicator
+- `Obs_t` : A censoring indicator
+
+#### TO DO: switch C_t to Obs_t 

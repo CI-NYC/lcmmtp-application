@@ -87,8 +87,6 @@ redcap <-
                            death_time),
          last_fu_dt = paste0(last_reviewed, "23:59")) %>%
   mutate_at(vars(ends_with("dt")), ~as.POSIXct(.,  format="%Y-%m-%d %H:%M", tz="America/New_York")) %>%
-  mutate(hours_until_intubation = time_length(difftime(intubation1_dt, ed_adm_dt), unit="hour"),
-         hours_until_intubation = time_length(difftime(intubation1_dt, ed_adm_dt), unit="hour")) %>% 
   arrange(empi, ed_adm_dt) %>%
   group_by(empi) %>%
   mutate(visit = 1, # for summing; meaningless variable
