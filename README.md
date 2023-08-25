@@ -55,18 +55,31 @@ To enforce temporality in the time-discretized data structure, intervals depende
 - Time windows were created by first sequencing `t1_start` to the time that intubation was met (`A_time`) in as close to 12 hour intervals as possible. Then, `A_time` until `max_time` was sequenced in as close to 12 hour intervals as possible. The 12 hour intervals were sequenced because `A_time` needed to have $L_t$ variables before it, and $Z_t$ variables after it. Put another way, $A_t$ falls in the middle of a 24 hour interval $t$.
 - Every *odd* date-time in the above sequence was called `l_start` and every *even* date-time in the sequence was called `z_start`.
 
-4. The start/stop date-time variables were used to divide up date-time-stamped covariates into the correct $L_t$ and $Z_t$ window. This was done using the function `divide_labs()` in `scripts/0-functions.R`. A variable was created for every covariate at every time point to indicate "missing" or "not missing" measurement. Missing measurements were substituted with -99999. The correct exposure levels, mediator levels, outcomes, and censoring variables at each time point were also created at this step. The final data structure after this was long (`id`, `window`, `L`, `A`, `Z`, `M`, `C`, `Y`), with one row per time window that each patient was in the study (i.e. there could be 3 rows for Patient 1, 12 rows for Patient 2).
+4. The start/stop date-time variables were used to divide up date-time-stamped covariates into the correct $L_t$ and $Z_t$ window. This was done using the function `divide_labs()` in `scripts/0-functions.R`. A variable was created for every covariate at every time point to indicate "missing" or "not missing" measurement. Missing measurements were substituted with -99999. The correct exposure levels, mediator levels, outcomes, and censoring variables at each time point were also created at this step. The final data structure after this was long (`empi`, `window`, `L`, `A`, `Z`, `M`, `C`, `Y`), with one row per time window that each patient was in the study (i.e. there could be 3 rows for Patient 1, 12 rows for Patient 2).
 
 5. The `window` from Step 4 were filtered to only contain the first 28 days of the study, as the maximum study length planned for this retrospective data was 28 days from hospitalization to evaluate the commonly assessed outcome of 28-day mortality. Then, the data were pivoted into wide format to contain variables:
 
-- `id` : Unique patient identifer.
+- `empi` : Unique patient identifer.
 
-# - `L_value_t_` : $L_t$ variable
-# 
-# - `L_missing_t_` : $L_t$ variable
+- `L_value_t_` : $L_t$ variable
+ 
+- `L_missing_t_` : $L_t$ variable
 
-- `M_t` : 
+- `A_t` : Patients supplemental oxygen status at time $t$ which takes values `0` = no supplemental oxygen, `1` = non-invasive supplemental oxygen support, and `2` = invasive mechanical ventilation.
 
-- `Obs_t` : A censoring indicator
+- `Z_value_t_` : $Z_t$ variable
+ 
+- `Z_missing_t_` : $Z_t$ variable
 
-#### TO DO: switch C_t to Obs_t 
+- `M_t` : Indicator for the patient meeting criteria for AKI by time window $t$.
+
+- `Y_t` :
+
+- `Obs_t` : An indicator for patient having an outcome `Y_t` *observed*. Thus, this is `1` until the window in which the patient is discharged, when it becomes `0`.
+
+### TO DO:
+
+- switch C_t to Obs_t
+- move individual long to wide scripts to single script
+- remove max time calculations from individual scripts
+- fix "never" time periods to be approximate rather than fixed 24 hr intervals
