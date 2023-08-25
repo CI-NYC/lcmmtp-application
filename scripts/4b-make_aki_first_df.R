@@ -69,7 +69,7 @@ aki_windows_tmp <- aki_windows |>
   mutate(z_end = lead(l_start)) |>
   drop_na(z_end) |>
   mutate(l_start = case_when(row_number() == 1 ~ l_start,
-                           TRUE ~ l_start + seconds(1)) # we want a new L to start right *after* the person is intubated, and Z to end when they are intubated
+                           TRUE ~ l_start + seconds(1)) # we want a new L to start right *after* the person gets AKI, and current Z to end when they are intubated
          ) |>
   mutate(l_end = as.POSIXct((as.numeric(l_start) + as.numeric(z_end)) / 2, origin = '1970-01-01'), # get the midway point between L and Z start/end times, call this l_end
          z_start = l_end + seconds(1)) |> # Z for that t starts a second after L ends
