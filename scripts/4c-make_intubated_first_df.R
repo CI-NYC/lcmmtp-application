@@ -81,7 +81,73 @@ int_windows <-
                                             TRUE ~ windows_12h_to_end),
   ) |>
   select(empi, t1_start, A_time, windows_12h_to_int_odd, max_time, windows_12h_to_end_odd) |>
-  pmap_dfr(create_periods)
+  pmap_dfr(create_periods) |>
+  arrange(empi, window) |>
+  mutate(index = row_number()) # index for modifying in next step
+
+# these empis get intubated right before they die -- need to fix some
+check_empis <- int_windows |>
+  left_join(int_first |> select(empi, M_time, Y_time))  |>
+  filter(!is.na(M_time)) |>
+  arrange(empi, window) |>
+  group_by(empi) |>
+  filter(M_time %within% interval(l_start, z_end) | M_time %within% interval(lag(l_start), lag(z_end))) |>
+  add_count() |> 
+  filter(n==1) |> pull(empi)
+
+to_mod <- 
+  int_windows |> 
+  filter(empi %in% check_empis) |>
+  left_join(int_first |> 
+              select(empi, M_time, Y_time)) |>
+  mutate(l_lead = lag(l_start)) |>
+  mutate(time_to_death = as.numeric(difftime(Y_time, M_time, units="hours"))) |>
+  filter(time_to_death > 3) |> # if less than 3 hours don't worry about labs that are measured between M_time and Y_time
+  group_by(empi) |>
+  filter(row_number() == n())
+
+dup <- to_mod
+
+# modify existing final row so that M is the final time point in this window t
+mod_row <-
+  to_mod |>
+  mutate(z_end = M_time,  # new end time, then new midpoints
+         l_end = as.POSIXct((as.numeric(l_start) + as.numeric(z_end)) / 2, origin = '1970-01-01'), # get the midway point between L and Z start/end times, call this l_end
+         z_start = l_end + seconds(1))
+
+# create a new final row for these patients (so that there is an additional time window to measure labs after M_t)
+new_row <-
+  dup |>
+  mutate(l_start = M_time + seconds(1), # new start time, then new midpoints
+         l_end = as.POSIXct((as.numeric(l_start) + as.numeric(z_end)) / 2, origin = '1970-01-01'), # get the midway point between L and Z start/end times, call this l_end
+         z_start = l_end + seconds(1)) |>
+  select(-index) # so that merging doesn't get messed up -- this is a duplicate of mod_row's indices
+
+mod_row |> names()
+
+
+
+# int_windows_mod <-
+  int_windows |>
+  left_join(int_first |> select(empi, M_time, Y_time))  |>
+  filter(!is.na(M_time)) |>
+  arrange(empi, window) |>
+  group_by(empi) |>
+  filter(M_time %within% interval(l_start, z_end) | M_time %within% interval(lag(l_start), lag(z_end))) |>
+  add_count() |> 
+    filter(n==1) |> pull(empi)
+  mutate(days_to_death = difftime(Y_time, M_time, units = "days")) |>
+    arrange(n, empi) |>
+    view()
+  filter(n == 1) |> # if this is the last time point, do nothing (patient is about to die) -- remove from modified dataset
+  mutate(z_end = case_when(row_number() == 1 ~ M_time,
+                           TRUE ~ z_end),
+         l_start = case_when(n == 1 ~ l_start, # if this is the last time point, do nothing (patient is about to die)
+                             row_number() == n() ~ M_time + seconds(1),
+                             TRUE ~ l_start),
+         l_end = as.POSIXct((as.numeric(l_start) + as.numeric(z_end)) / 2, origin = '1970-01-01'), # get the midway point between L and Z start/end times, call this l_end
+         z_start = l_end + seconds(1)
+         )
 
 # temporary data frame containing empi, window, l_start, l_end, z_start, z_end where l's and z's are dividied into equal intervals
 # need to fix in next step for the n=XX intervals in which patients get AKI during that time period (so that Z ends at time of AKI and a new L starts)
