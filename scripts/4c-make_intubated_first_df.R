@@ -9,6 +9,8 @@ library(tidyverse)
 # library(tidylog)
 library(janitor)
 
+source("scripts/0-functions.R")
+
 cp_dt <- read_rds(here::here("data/derived/dts_cohort.rds"))
 #labs <- read_rds(here::here("data", "raw", "2020-08-17", "wcm_labs_filtered.rds"))
 all_labs_clean <- read_rds(here::here("data/derived/all_labs_clean.rds")) |>
@@ -93,8 +95,10 @@ check_empis <- int_windows |>
   group_by(empi) |>
   filter(M_time %within% interval(l_start, z_end) | M_time %within% interval(lag(l_start), lag(z_end))) |>
   add_count() |> 
-  filter(n==1) |> pull(empi)
+  filter(n==1) |>
+  pull(empi)
 
+# extract patients who got aki in their final time point (but not < 3 hours before death)
 to_mod <- 
   int_windows |> 
   filter(empi %in% check_empis) |>
@@ -113,33 +117,27 @@ mod_row <-
   to_mod |>
   mutate(z_end = M_time,  # new end time, then new midpoints
          l_end = as.POSIXct((as.numeric(l_start) + as.numeric(z_end)) / 2, origin = '1970-01-01'), # get the midway point between L and Z start/end times, call this l_end
-         z_start = l_end + seconds(1))
+         z_start = l_end + seconds(1))  |>
+  select(empi, window, l_start, l_end, z_start, z_end, index)
 
 # create a new final row for these patients (so that there is an additional time window to measure labs after M_t)
 new_row <-
   dup |>
   mutate(l_start = M_time + seconds(1), # new start time, then new midpoints
          l_end = as.POSIXct((as.numeric(l_start) + as.numeric(z_end)) / 2, origin = '1970-01-01'), # get the midway point between L and Z start/end times, call this l_end
-         z_start = l_end + seconds(1)) |>
-  select(-index) # so that merging doesn't get messed up -- this is a duplicate of mod_row's indices
+         z_start = l_end + seconds(1))  |>
+  select(empi, window, l_start, l_end, z_start, z_end, index)
 
-mod_row |> names()
-
-
-
-# int_windows_mod <-
+# modify windows for patients who got AKI after being intubated (but not in their final time period)
+most_int_windows_mod <-
   int_windows |>
-  left_join(int_first |> select(empi, M_time, Y_time))  |>
+  left_join(int_first |> select(empi, M_time))  |>
   filter(!is.na(M_time)) |>
   arrange(empi, window) |>
   group_by(empi) |>
   filter(M_time %within% interval(l_start, z_end) | M_time %within% interval(lag(l_start), lag(z_end))) |>
   add_count() |> 
-    filter(n==1) |> pull(empi)
-  mutate(days_to_death = difftime(Y_time, M_time, units = "days")) |>
-    arrange(n, empi) |>
-    view()
-  filter(n == 1) |> # if this is the last time point, do nothing (patient is about to die) -- remove from modified dataset
+  filter(n != 1) |> # means intubated in the last time point -- modify in next code step
   mutate(z_end = case_when(row_number() == 1 ~ M_time,
                            TRUE ~ z_end),
          l_start = case_when(n == 1 ~ l_start, # if this is the last time point, do nothing (patient is about to die)
@@ -147,47 +145,26 @@ mod_row |> names()
                              TRUE ~ l_start),
          l_end = as.POSIXct((as.numeric(l_start) + as.numeric(z_end)) / 2, origin = '1970-01-01'), # get the midway point between L and Z start/end times, call this l_end
          z_start = l_end + seconds(1)
-         )
+         ) |>
+  select(empi, window, l_start, l_end, z_start, z_end, index)
 
-# temporary data frame containing empi, window, l_start, l_end, z_start, z_end where l's and z's are dividied into equal intervals
-# need to fix in next step for the n=XX intervals in which patients get AKI during that time period (so that Z ends at time of AKI and a new L starts)
-int_windows_tmp <- int_windows |>
-  group_by(empi) |>
-  mutate(z_end = lead(l_start)) |>
-  drop_na(z_end) |>
-  mutate(l_start = case_when(row_number() == 1 ~ l_start,
-                             TRUE ~ l_start + seconds(1)) # we want a new L to start right *after* the person is intubated, and Z to end when they are intubated
-  ) |>
-  mutate(l_end = as.POSIXct((as.numeric(l_start) + as.numeric(z_end)) / 2, origin = '1970-01-01'), # get the midway point between L and Z start/end times, call this l_end
-         z_start = l_end + seconds(1)) |> # Z for that t starts a second after L ends
-  select(empi, l_start, l_end, z_start, z_end) |>
-  mutate(window = row_number()) |>
-  ungroup() |>
-  mutate(index = row_number()) # to modify intervals in which intubation occurs in next lines
+int_windows_mod <-
+  bind_rows(mod_row, new_row) |>
+  bind_rows(most_int_windows_mod )
 
-# filter to windows in which intubation occurs (at some point after AKI)
-# modify z start and l end to reflect this A_time
-aki_windows_mod <-
+# merge modified data rows into final int windows dataset 
+int_windows_clean <-
   int_windows_tmp |>
-  left_join(int_first |> select(empi, A_time)) |>
-  drop_na(A_time) |>
-  filter(A_time %within% interval(l_start, z_end)) |>
-  mutate(z_start = A_time,
-         l_end = z_start - seconds(1)) |>
-  select(-A_time)
+  filter(!(index %in% int_windows_mod$index)) |> # filter rows that need to be modified out of the original data
+  full_join(int_windows_mod) |> # add modified rows (from above) into final clean data
+  arrange(index, l_start) |> # 24 empis with duplicated index (these had a row added because they died shortly after being intubated)
+  select(-index)
 
-# merge modified data rows into final aki windows dataset 
-aki_windows_clean <-
-  aki_windows_tmp |>
-  filter(!(index %in% aki_windows_mod$index)) |> # filter rows that need to be modified out of the original data
-  full_join(aki_windows_mod) |> # add modified rows (from above) into final clean data
-  arrange(index)
-
-aki_windows_clean
+int_windows_clean |> get_dupes(index)
 
 # Create a grid of all covariates and time windows to map through
 map_grid <- expand.grid("name" = unique(all_labs_clean$name), "window" = 1:28)
-all_labs <- map2(map_grid$name, map_grid$window, ~divide_labs(aki_windows_clean, .x, .y))
+all_labs <- map2(map_grid$name, map_grid$window, ~divide_labs(int_windows_clean, .x, .y))
 
 # put together all L_t and Z_t in long format and create missingness indicators
 Ls_and_Zs <- 
@@ -203,22 +180,22 @@ Ls_and_Zs <-
 
 # fill in M = 1 for all the windows where intubation occurs on or after
 # need to update this for different levels of supp o2 later
-Ms <- 
-  aki_windows_tmp |>
-  left_join(aki_first |> select(empi, M_time)) |>
-  mutate(M_this_window = case_when(M_time == z_end ~ window)) |> # mark which window AKI occurs in (it's the end of the Z interval)
-  fill(M_this_window, .direction = "downup") |>
-  mutate(M = case_when(window >= M_this_window ~ 1, TRUE ~ 0)) |>
-  select(empi, window, M_this_window, M)
-
-# mark which window intubation occurred --> switch to intubation = 2 later
-As <-
-  aki_windows_clean |>
-  left_join(aki_first |> select(empi, A_time)) |>
-  left_join(Ms) |>
-  mutate(A = case_when(is.na(A_time) ~ 0, # never intubated
-                       l_start < A_time ~ 0,
-                       l_start >= A_time ~ 1)) 
+# Ms <- 
+#   aki_windows_tmp |>
+#   left_join(aki_first |> select(empi, M_time)) |>
+#   mutate(M_this_window = case_when(M_time == z_end ~ window)) |> # mark which window AKI occurs in (it's the end of the Z interval)
+#   fill(M_this_window, .direction = "downup") |>
+#   mutate(M = case_when(window >= M_this_window ~ 1, TRUE ~ 0)) |>
+#   select(empi, window, M_this_window, M)
+# 
+# # mark which window intubation occurred --> switch to intubation = 2 later
+# As <-
+#   aki_windows_clean |>
+#   left_join(aki_first |> select(empi, A_time)) |>
+#   left_join(Ms) |>
+#   mutate(A = case_when(is.na(A_time) ~ 0, # never intubated
+#                        l_start < A_time ~ 0,
+#                        l_start >= A_time ~ 1)) 
 
 # Note I'll probably need to carry these Y's through (deterministic)
 Ys <-
