@@ -2,6 +2,7 @@
 ### Kat Hoffman
 
 library(tidyverse) 
+# remotes::install_local(here::here("../../../../Documents/Github/lcmmtp"), force=T)
 library(lcmmtp) # remotes::install_github("nt-williams/lcmmtp")
 library(mlr3superlearner) # remotes::install_github("nt-williams/mlr3superlearner")
 
@@ -13,7 +14,9 @@ d_as <- function(data, trt) rep(0, length(data[[trt]]))
 
 test <-
   all_wide |>
-    select(L_value_1_glucose,
+    select(empi,
+           group,
+           L_value_1_glucose,
            L_value_2_glucose,
            A_1,
            A_2,
@@ -35,22 +38,15 @@ vars <- lcmmtp:::lcmmtp_variables$new(
   Z = list(c("Z_value_1_glucose"), c("Z_value_2_glucose")),
   M = c("M_1", "M_2"),
   Y = c("Y_1", "Y_2"),
+  # Y = "Y_2",
   cens = c("C_1", "C_2")
 )
 
-tmp <-
-  test |>
-  select(L_value_1_glucose,
-         L_value_2_glucose,
-         A_1, A_2,
-         Z_value_1_glucose,
-         Z_value_2_glucose,
-         M_1, M_2,
-         Y_1, Y_2,
-         C_1, C_2)
+
+view(test)
 
 tmp |>
-  filter(C_1 == 0)
+  filter(C_2 == 0)
 
 
 fit <- lcmmtp(test,
@@ -60,5 +56,8 @@ fit <- lcmmtp(test,
               # "glm",
               # folds=2
 )
+
+test |>
+  filter(C_1==1, is.na(M_2))
 
 fit
