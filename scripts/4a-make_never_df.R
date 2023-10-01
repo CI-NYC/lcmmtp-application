@@ -21,27 +21,63 @@ nevers <-
   cp_dt |>
   filter((is.na(A_time) & is.na(M_time))) 
 
-# Clean data set for determining time window with empis, l_start, l_end, z_start, and z_end
+create_periods  <- function(empi, t1_start, max_time, max_windows){
+  
+  max_windows <- max_windows + 1 # need to make a start/stop sequence that is 1 longer than the desired number of time windows 
+  
+  # divide up study start time to time of aki into equal intervals
+  periods <- 
+    seq.POSIXt(from = t1_start, to = max_time, length.out = max_windows) |>
+    as_tibble() |>
+    mutate(empi = empi)
+  
+  # return the unique sequence of times; these are our start times for each L window
+  out <- periods |> select(empi, l_start = value)
+  
+}
+
 nevers_clean <-
   nevers |>
-  nest(.by = empi) |>
-  mutate(data = map(data, function(x){
-    x |> 
-      mutate(max_time = pmax(Y_time, Cens_time, na.rm = T),
-             max_windows = difftime(max_time, t1_start),
-             window = 1
-      ) |>
-      complete(window = 1:ceiling(max_windows)) |>
-      fill(t1_start) |>
-      mutate(l_start = t1_start + days(window - 1),
-             l_end = l_start + hours(12) - seconds(1),
-             z_start = l_start + hours(12),
-             z_end = l_start + days(1) - seconds(1)) |>
-      select(window, l_start, l_end, z_start, z_end) |>
-      filter(window != 0) # filter out two windows that are 0 due to time ordering issues
-  }) 
+  mutate(
+    max_time = pmax(Y_time, Cens_time, na.rm = T),
+    max_windows = ceiling(as.numeric(difftime(max_time, t1_start, units = "days"))), # get max number of 24 hour windows,
+    window = 1) |>
+  select(empi, t1_start, max_time, max_windows) |>
+  pmap_dfr(create_periods) |>
+  group_by(empi) |>
+  mutate(z_end = lead(l_start)) |>
+  drop_na(z_end) |>
+  mutate(l_start = case_when(row_number() == 1 ~ l_start,
+                             TRUE ~ l_start + seconds(1)) # we want a new L to start right *after* the person gets AKI, and current Z to end when they are intubated
   ) |>
-  unnest(cols = data)
+  mutate(l_end = as.POSIXct((as.numeric(l_start) + as.numeric(z_end)) / 2, origin = '1970-01-01'), # get the midway point between L and Z start/end times, call this l_end
+         z_start = l_end + seconds(1)) |> # Z for that t starts a second after L ends
+  select(empi, l_start, l_end, z_start, z_end) |>
+  mutate(window = row_number()) |>
+  ungroup()
+
+# # Clean data set for determining time window with empis, l_start, l_end, z_start, and z_end
+# nevers_clean <-
+#   nevers |>
+#   nest(.by = empi) |>
+#   head() |>
+#   mutate(data = map(data, function(x){
+#     x |> 
+#       mutate(max_time = pmax(Y_time, Cens_time, na.rm = T),
+#              max_windows = ceiling(as.numeric(difftime(max_time, t1_start, units = "days"))), # get max number of 24 hour windows,
+#              window = 1
+#       ) |>
+#       complete(window = 1:ceiling(max_windows)) |>
+#       fill(t1_start) |>
+#       mutate(l_start = t1_start + days(window - 1),
+#              l_end = l_start + hours(12) - seconds(1),
+#              z_start = l_start + hours(12),
+#              z_end = l_start + days(1) - seconds(1)) |>
+#       select(window, l_start, l_end, z_start, z_end) |>
+#       filter(window != 0) # filter out two windows that are 0 due to time ordering issues
+#   }) 
+#   ) |>
+#   unnest(cols = data)
 
 # Create a grid of all covariates and time windows to map through
 map_grid <- expand.grid("name" = unique(all_labs_clean$name), "window" = 1:28)
@@ -73,6 +109,7 @@ Ys <-
   left_join(nevers |> select(empi, Y_time, Cens_time)) |>
   # if died in this period, outcome Y is 1
   mutate(Y = case_when(Y_time %within% interval(l_start, z_end) ~ 1,
+                       # Y_time > l_start ~ 1,
                        # if they were discharged in this period, no outcome observed (NA)
                        Cens_time %within% interval(l_start, z_end) ~ NA_real_,
                        # otherwise, outcome is 0
