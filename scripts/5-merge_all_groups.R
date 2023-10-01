@@ -3,9 +3,9 @@
 
 library(tidyverse)
 
-nevers_wide <- read_rds(here::here("data/derived/nevers_wide.rds"))
-aki_first_wide <- read_rds(here::here("data/derived/aki_first_wide.rds"))
-int_first_wide <- read_rds(here::here("data/derived/int_first_wide.rds"))
+nevers_wide <- read_rds(here::here("data/derived/nevers_wide.rds")) |> mutate(group = "nevers")
+aki_first_wide <- read_rds(here::here("data/derived/aki_first_wide.rds")) |> mutate(group = "aki_first")
+int_first_wide <- read_rds(here::here("data/derived/int_first_wide.rds")) |> mutate(group = "int_first")
 
 all_wide <-
   reduce(list(nevers_wide, aki_first_wide, int_first_wide),
