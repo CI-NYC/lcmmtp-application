@@ -163,14 +163,16 @@ M_wide <-
   filter(window < max_window_data) |>
   pivot_wider(id_cols=empi,
               names_from = window,
-              values_from = M)
+              values_from = M,
+              names_prefix = "M_")
 
 A_wide <- 
   As |>
   filter(window < max_window_data) |>
   pivot_wider(id_cols=empi,
               names_from = window,
-              values_from = A)
+              values_from = A,
+              names_prefix = "A_")
 
 Ls_and_Zs_wide <-
   Ls_and_Zs |>
@@ -199,7 +201,7 @@ Cs_wide <-
 # merge wide data set and save data ---------------------------------------
 
 aki_first_wide <-
-  reduce(list(aki_first, Ms, As, Ls_and_Zs_wide, Ys_wide, Cs_wide),
+  reduce(list(aki_first, M_wide, A_wide, Ls_and_Zs_wide, Ys_wide, Cs_wide),
   ~left_join(.x, .y))
 
 saveRDS(aki_first_wide, here::here("data/derived/aki_first_wide.rds"))

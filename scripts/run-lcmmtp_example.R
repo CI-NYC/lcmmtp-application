@@ -27,9 +27,9 @@ vars <- lcmmtp:::lcmmtp_variables$new(
 fit <- lcmmtp(lcmmtp_foo,
        vars,
        d_ap,
-       d_as,
-       "glm",
-       folds=2
+       d_as #,
+       # "glm" #,
+       # folds=2
        )
 
 fit

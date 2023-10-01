@@ -125,7 +125,7 @@ Cs_wide <-
 # merge wide data set and save data ---------------------------------------
 
 nevers_wide <-
-  reduce(list(nevers_clean, M_and_A_wide, Ls_and_Zs_wide, Ys_wide, Cs_wide),
+  reduce(list(nevers, M_and_A_wide, Ls_and_Zs_wide, Ys_wide, Cs_wide),
   ~left_join(.x, .y))
 
 saveRDS(nevers_wide, here::here("data/derived/nevers_wide.rds"))
