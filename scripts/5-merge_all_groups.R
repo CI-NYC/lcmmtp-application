@@ -1,5 +1,9 @@
-### Merge all three groups (never, intubated first, AKI first) data into one wide DF
+#######################################################
+#######################################################
+### Merge vars for all three groups (never, intubated first, AKI first) data into one wide DF
 ### Kat Hoffman
+#######################################################
+#######################################################
 
 library(tidyverse)
 

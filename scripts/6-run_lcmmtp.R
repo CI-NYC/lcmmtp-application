@@ -1,8 +1,11 @@
+#######################################################
+#######################################################
 ### Run lcmmtp software on final dataset
 ### Kat Hoffman
+#######################################################
+#######################################################
 
 library(tidyverse) 
-# remotes::install_local(here::here("../../../../Documents/Github/lcmmtp"), force=T)
 library(lcmmtp) # remotes::install_github("nt-williams/lcmmtp")
 library(mlr3superlearner) # remotes::install_github("nt-williams/mlr3superlearner")
 
@@ -11,26 +14,6 @@ all_wide <- read_rds("data/derived/all_wide.rds")
 # set d prime and d star functions
 d_ap <- function(data, trt) rep(1, length(data[[trt]]))
 d_as <- function(data, trt) rep(0, length(data[[trt]]))
-
-test <-
-  all_wide |>
-    select(empi,
-           group,
-           # t1_start,
-           # A_time, M_time, Y_time, Cens_time,
-           L_value_1_glucose,
-           L_value_2_glucose,
-           A_1,
-           A_2,
-           Z_value_1_glucose,
-           Z_value_2_glucose,
-           M_1,
-           M_2,
-           Y_1,
-           Y_2,
-           Observed_1,
-           Observed_2
-           ) 
 
 max_window <- 14
 As <- paste0("A_", 1:max_window)
