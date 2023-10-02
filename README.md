@@ -1,6 +1,6 @@
 # LCM MTP Application
 
-Code to analyze the direct and indirect effects through acute kidney injury (AKI) of a delay in intubation policy on COVID-19 mortality using the [`lcmmtp`](github.com/nt-williams/lcmmtp) R package.
+Code to analyze the direct and indirect effects through acute kidney injury (AKI) of a delay in intubation policy on COVID-19 mortality using the [`lcmmtp`](https://github.com/nt-williams/lcmmtp) R package.
 
 ## Data cleaning
 
@@ -61,19 +61,19 @@ To enforce temporality in the time-discretized data structure, intervals depende
 
 - `empi` : Unique patient identifer.
 
-- `L_value_t_` : $L_t$ variable
+- `L_value_t_*` : $L_t$ variables indicating the value if measured, or LOCF if not measured but a previous value was measured, or -99999 if no previous value present to carry forward
  
-- `L_missing_t_` : $L_t$ variable
+- `L_missing_t_*` : $L_t$ variables indicating the value was missing
 
 - `A_t` : Patients supplemental oxygen status at time $t$ which takes values `0` = no supplemental oxygen, `1` = non-invasive supplemental oxygen support, and `2` = invasive mechanical ventilation.
 
-- `Z_value_t_` : $Z_t$ variable
+- `Z_value_t_*` : $Z_t$ variables indicating the value if measured, or LOCF if not measured but a previous value was measured, or -99999  if no previous value present to carry forward
  
-- `Z_missing_t_` : $Z_t$ variable
+- `Z_missing_t_*` : $Z_t$ variables indicating the value was missing
 
 - `M_t` : Indicator for the patient meeting criteria for AKI by time window $t$.
 
-- `Y_t` : Indicator for death at the end of time window $t$. Once $Y_t = 1$, the outcome is deterministically equal to 1.
+- `Y_t` : Indicator for death at the end of time window $t$. Once $Y_t = 1$, the outcome is deterministic (equal to 1).
 
 - `Obs_t` : An indicator for patient having an outcome `Y_t` *observed*. Thus, this is `1` until the window in which the patient is discharged, when it becomes `0`.
 
