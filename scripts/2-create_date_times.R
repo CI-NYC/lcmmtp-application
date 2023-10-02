@@ -34,6 +34,6 @@ cp_dt <-
          M_time >= t1_start | is.na(M_time),
          Y_time >= t1_start | is.na(Y_time),
          Y_time >= A_time | is.na(Y_time) | is.na(A_time), # 1 person with non-sensical time
-         Cens_time >= t1_start | is.na(Cens_time))
+         Cens_time > t1_start | is.na(Cens_time))
 
 saveRDS(cp_dt, here::here("data/derived/dts_cohort.rds"))
