@@ -202,17 +202,6 @@ int_windows_clean <-
   arrange(empi, l_start) |>
   mutate(window = row_number())
 
-# # check if there is someone in ids but not section 2 or 3
-
-# nrow(int_windows)
-# nrow(int_windows_clean)
-# 
-# int_windows_section1 |> left_join(int_first |> select(empi, M_time)) |> filter(is.na(M_time)) |> nrow()
-# int_windows |>
-#   left_join(int_first |> select(empi, M_time))  |>
-#   filter(!is.na(M_time)) |> nrow()
-
-
 # Create a grid of all covariates and time windows to map through
 map_grid <- expand.grid("name" = unique(all_labs_clean$name), "window" = 1:28)
 all_labs <- map2(map_grid$name, map_grid$window, ~divide_labs(int_windows_clean, .x, .y))
@@ -264,11 +253,22 @@ Cs <- int_windows_clean |>
   select(empi, window, l_start, z_end) |>
   left_join(int_first |> select(empi, Y_time, Cens_time)) |>
   # if they were discharged in this period, no outcome observed
-  mutate(C = case_when(Cens_time == z_end ~ 0,
+  mutate(Observed = case_when(Cens_time == z_end ~ 0,
                        # otherwise, observed
                        TRUE ~ 1))
 
-# Turn into wide form data ------------------------------------------------
+# Save long format data ------------------------------------------------
+
+fp <- "data/derived/int_first"
+saveRDS(Ls_and_Zs, here::here(fp, "Ls_and_Zs.rds"))
+saveRDS(Ms, here::here(fp, "Ms.rds"))
+saveRDS(As, here::here(fp, "As.rds"))
+saveRDS(Cs, here::here(fp, "Cs.rds"))
+saveRDS(Ys, here::here(fp, "Ys.rds"))
+saveRDS(int_first, here::here(fp, "int_first.rds"))
+
+
+
 
 max_window_data <- 28
 

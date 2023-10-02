@@ -12,7 +12,6 @@ library(janitor)
 source(here::here("scripts/0-functions.R"))
 
 cp_dt <- read_rds(here::here("data/derived/dts_cohort.rds"))
-#labs <- read_rds(here::here("data", "raw", "2020-08-17", "wcm_labs_filtered.rds"))
 all_labs_clean <- read_rds(here::here("data/derived/all_labs_clean.rds")) |>
   mutate(name = snakecase::to_snake_case(name))
 
@@ -60,9 +59,10 @@ aki_windows <-
          max_window_study_end = round(as.numeric(difftime(max_time, t1_start, units = "days"))), # get closest number of 24 hour windows
          window = 1) |> 
   select(empi, t1_start, M_time, max_window_aki, max_time, max_window_after_aki) |>
+  mutate(across(starts_with("max_window_"), ~case_when(.x == 0 ~ 1, TRUE ~ .x))) |>
   pmap_dfr(create_periods)
 
-# temporary data frame containing empi, window, l_start, l_end, z_start, z_end where l's and z's are dividied into equal intervals
+# temporary data frame containing empi, window, l_start, l_end, z_start, z_end where l's and z's are divided into equal intervals
 # need to fix in next step for the n=86 intervals in which patients get intubated during that time period (so that L's come before and Z's come after intubation for that time period only)
 aki_windows_tmp <- aki_windows |>
   group_by(empi) |>
@@ -96,8 +96,6 @@ aki_windows_clean <-
   full_join(aki_windows_mod) |> # add modified rows (from above) into final clean data
   arrange(index)
 
-aki_windows_clean
-
 # Create a grid of all covariates and time windows to map through
 map_grid <- expand.grid("name" = unique(all_labs_clean$name), "window" = 1:28)
 all_labs <- map2(map_grid$name, map_grid$window, ~divide_labs(aki_windows_clean, .x, .y))
@@ -117,7 +115,7 @@ Ls_and_Zs <-
 # fill in M = 1 for all the windows where intubation occurs on or after
 # need to update this for different levels of supp o2 later
 Ms <- 
-  aki_windows_tmp |>
+  aki_windows_clean |>
   left_join(aki_first |> select(empi, M_time)) |>
   mutate(M_this_window = case_when(M_time == z_end ~ window)) |> # mark which window AKI occurs in (it's the end of the Z interval)
   fill(M_this_window, .direction = "downup") |>
@@ -150,60 +148,17 @@ Cs <- aki_windows_clean |>
   select(empi, window, l_start, z_end) |>
   left_join(aki_first |> select(empi, Y_time, Cens_time)) |>
   # if they were discharged in this period, no outcome observed
-  mutate(C = case_when(Cens_time == z_end ~ 0,
+  mutate(Observed = case_when(Cens_time == z_end ~ 0,
                        # otherwise, observed
                        TRUE ~ 1))
 
-# Turn into wide form data ------------------------------------------------
 
-max_window_data <- 28
+# Save long format data ------------------------------------------------
 
-M_wide <- 
-  Ms |>
-  filter(window < max_window_data) |>
-  pivot_wider(id_cols=empi,
-              names_from = window,
-              values_from = M,
-              names_prefix = "M_")
-
-A_wide <- 
-  As |>
-  filter(window < max_window_data) |>
-  pivot_wider(id_cols=empi,
-              names_from = window,
-              values_from = A,
-              names_prefix = "A_")
-
-Ls_and_Zs_wide <-
-  Ls_and_Zs |>
-  filter(window < max_window_data) |>
-  as_tibble() |>
-  pivot_wider(id_cols=empi,
-              names_from = c(window, covar),
-              values_from = c(L_value, L_missing, Z_value, Z_missing))
-
-Ys_wide <-
-  Ys |>
-  filter(window < max_window_data) |>
-  pivot_wider(id_cols=empi,
-              names_from = window,
-              values_from = Y,
-              names_prefix = "Y_")
-
-Cs_wide <-
-  Cs |>
-  filter(window < max_window_data) |>
-  pivot_wider(id_cols=empi,
-              names_from = window,
-              values_from = C,
-              names_prefix = "C_")
-
-# merge wide data set and save data ---------------------------------------
-
-aki_first_wide <-
-  reduce(list(aki_first, M_wide, A_wide, Ls_and_Zs_wide, Ys_wide, Cs_wide),
-  ~left_join(.x, .y))
-
-saveRDS(aki_first_wide, here::here("data/derived/aki_first_wide.rds"))
-
-
+fp <- "data/derived/aki_first"
+saveRDS(Ls_and_Zs, here::here(fp, "Ls_and_Zs.rds"))
+saveRDS(Ms, here::here(fp, "Ms.rds"))
+saveRDS(As, here::here(fp, "As.rds"))
+saveRDS(Cs, here::here(fp, "Cs.rds"))
+saveRDS(Ys, here::here(fp, "Ys.rds"))
+saveRDS(aki_first, here::here(fp, "aki_first.rds"))

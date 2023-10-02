@@ -56,29 +56,6 @@ nevers_clean <-
   mutate(window = row_number()) |>
   ungroup()
 
-# # Clean data set for determining time window with empis, l_start, l_end, z_start, and z_end
-# nevers_clean <-
-#   nevers |>
-#   nest(.by = empi) |>
-#   head() |>
-#   mutate(data = map(data, function(x){
-#     x |> 
-#       mutate(max_time = pmax(Y_time, Cens_time, na.rm = T),
-#              max_windows = ceiling(as.numeric(difftime(max_time, t1_start, units = "days"))), # get max number of 24 hour windows,
-#              window = 1
-#       ) |>
-#       complete(window = 1:ceiling(max_windows)) |>
-#       fill(t1_start) |>
-#       mutate(l_start = t1_start + days(window - 1),
-#              l_end = l_start + hours(12) - seconds(1),
-#              z_start = l_start + hours(12),
-#              z_end = l_start + days(1) - seconds(1)) |>
-#       select(window, l_start, l_end, z_start, z_end) |>
-#       filter(window != 0) # filter out two windows that are 0 due to time ordering issues
-#   }) 
-#   ) |>
-#   unnest(cols = data)
-
 # Create a grid of all covariates and time windows to map through
 map_grid <- expand.grid("name" = unique(all_labs_clean$name), "window" = 1:28)
 all_labs <- map2(map_grid$name, map_grid$window, ~divide_labs(nevers_clean, .x, .y))
@@ -96,11 +73,14 @@ Ls_and_Zs <-
          Z_value = ifelse(is.na(Z_value), -99999, Z_value))
 
 # fill in M = 0 for all the mediators (this group never gets AKI)
-# fill in A = 0 (change for oxygenation data)
-M_and_A <- 
+Ms <- 
   nevers_clean |>
-  mutate(M = 0,
-         A = 0)
+  mutate(M = 0)
+
+# fill in A = 0 (change for oxygenation data)
+As <- 
+  nevers_clean |>
+  mutate(A = 0)
 
 # Note I'll probably need to carry these Y's through (deterministic)
 Ys <-
@@ -120,51 +100,18 @@ Cs <- nevers_clean |>
   select(empi, window, l_start, z_end) |>
   left_join(nevers |> select(empi, Y_time, Cens_time)) |>
   # if they were discharged in this period, no outcome observed
-  mutate(C = case_when(Cens_time %within% interval(l_start, z_end) ~ 0,
+  mutate(Observed = case_when(Cens_time %within% interval(l_start, z_end) ~ 0,
                        # otherwise, observed
                        TRUE ~ 1))
 
-# Turn into wide form data ------------------------------------------------
 
-max_window_data <- 28
+# Save long format data ------------------------------------------------
 
-M_and_A_wide <- 
-  M_and_A |>
-  filter(window < max_window_data) |>
-  pivot_wider(id_cols=empi,
-              names_from = window,
-              values_from = c(A, M))
-
-Ls_and_Zs_wide <-
-  Ls_and_Zs |>
-  filter(window < max_window_data) |>
-  as_tibble() |>
-  pivot_wider(id_cols=empi,
-              names_from = c(window, covar),
-              values_from = c(L_value, L_missing, Z_value, Z_missing))
-
-Ys_wide <-
-  Ys |>
-  filter(window < max_window_data) |>
-  pivot_wider(id_cols=empi,
-              names_from = window,
-              values_from = Y,
-              names_prefix = "Y_")
-
-Cs_wide <-
-  Cs |>
-  filter(window < max_window_data) |>
-  pivot_wider(id_cols=empi,
-              names_from = window,
-              values_from = C,
-              names_prefix = "C_")
-
-# merge wide data set and save data ---------------------------------------
-
-nevers_wide <-
-  reduce(list(nevers, M_and_A_wide, Ls_and_Zs_wide, Ys_wide, Cs_wide),
-  ~left_join(.x, .y))
-
-saveRDS(nevers_wide, here::here("data/derived/nevers_wide.rds"))
-
+fp <- "data/derived/nevers"
+saveRDS(Ls_and_Zs, here::here(fp, "Ls_and_Zs.rds"))
+saveRDS(Ms, here::here(fp, "Ms.rds"))
+saveRDS(As, here::here(fp, "As.rds"))
+saveRDS(Cs, here::here(fp, "Cs.rds"))
+saveRDS(Ys, here::here(fp, "Ys.rds"))
+saveRDS(nevers_clean, here::here(fp, "nevers.rds"))
 
