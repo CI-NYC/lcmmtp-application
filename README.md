@@ -73,13 +73,13 @@ To enforce temporality in the time-discretized data structure, intervals depende
 
 - `M_t` : Indicator for the patient meeting criteria for AKI by time window $t$.
 
-- `Y_t` :
+- `Y_t` : Indicator for death at the end of time window $t$. Once $Y_t = 1$, the outcome is deterministically equal to 1.
 
 - `Obs_t` : An indicator for patient having an outcome `Y_t` *observed*. Thus, this is `1` until the window in which the patient is discharged, when it becomes `0`.
 
 ### TO DO:
 
-- switch C_t to Obs_t
-- move individual long to wide scripts to single script
-- remove max time calculations from individual scripts
-- fix "never" time periods to be approximate rather than fixed 24 hr intervals
+- add more libraries for SL candidates
+- add in more vitals
+- add in co-prescriptions?
+- make a new level for respiratory support
