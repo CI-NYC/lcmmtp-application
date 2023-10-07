@@ -23,6 +23,7 @@ library(janitor)
 
 cp_dt <- read_rds(here::here("data/derived/dts_cohort.rds"))
 labs <- read_rds(here::here("data", "raw", "2020-08-17", "wcm_labs_filtered.rds"))
+vitals <- read_rds(here::here("data", "raw", "2020-08-17", "wcm_vitals_filtered_rel.rds"))
 
 # Define "worst" lab as low or high depending on lab
 
@@ -59,13 +60,21 @@ high_lab_params <- c(
   "Creatinine"
 )
 
+vital_params <- c(
+  "vs_hr_hr",
+  "xp_resp_spo2",
+  "xp_resp_rate_pt",
+  "vs_bp_noninvasive (s)",
+  "vs_bp_noninvasive (d)",
+  "VS_Temperature (C) calc"
+)
+
 labs_low_long <-
   labs %>%
   filter(result_name %in% low_lab_params) %>%
   select(empi, result_time, result_name, ord_value) %>%
   mutate(ord_value = parse_number(ord_value),
          result_name = case_when(str_detect(result_name, "Glucose") ~ "Glucose",
-                                 str_detect(result_name, "Reactive") ~ "C-Reactive Protein",
                                  str_detect(result_name, "Reactive") ~ "C-Reactive Protein",
                                  str_detect(result_name, "Lactate") ~ "Lactate",
                                  str_detect(result_name, "pH") ~ "Arterial Ph",
@@ -91,7 +100,44 @@ labs_high_long <-
                                  TRUE ~ result_name)) |>
   select(empi, result_dt = result_time, result_value = ord_value, name = result_name)
 
-all_labs_clean <- bind_rows(labs_low_long, labs_high_long)
+
+vitals_long <-
+  vitals %>%
+  filter(observation_name %in% vital_params) |>
+  select(empi, recordeddtm, observation_name, valuetext) |>
+  mutate(valuetext = parse_number(valuetext),
+         observation_name = case_when(observation_name == "vs_hr_hr" ~ "heart_rate",
+                                      observation_name == "xp_resp_spo2" ~ "spo2",
+                                      observation_name == "xp_resp_rate_pt" ~ "resp_rate",
+                                      observation_name == "vs_bp_noninvasive (s)" ~ "blood_pressure_s",
+                                      observation_name == "vs_bp_noninvasive (d)" ~ "blood_pressure_d",
+                                      observation_name == "vs_bp_noninvasive (m)" ~ "blood_pressure_m",
+                                      observation_name == "VS_Temperature (C) calc" ~ "temperature")) |>
+  select(empi, result_dt =  recordeddtm, result_value = valuetext, name = observation_name)
+
+
+# vitals_high_long <-
+#   vitals %>%
+#   filter(observation_name %in% vital_params) %>%
+#   select(empi, recordeddtm, observation_name, valuetext) %>%
+#   right_join(df_days) %>%
+#   filter(recordeddtm %within% interval(day_start_dt, day_end_dt)) %>%
+#   mutate(valuetext = parse_number(valuetext),
+#          observation_name = case_when(observation_name == "vs_hr_hr" ~ "heart_rate",
+#                                       observation_name == "xp_resp_spo2" ~ "spo2",
+#                                       observation_name == "xp_resp_rate_pt" ~ "resp_rate",
+#                                       observation_name == "vs_bp_noninvasive (s)" ~ "blood_pressure_s",
+#                                       observation_name == "vs_bp_noninvasive (d)" ~ "blood_pressure_d",
+#                                       observation_name == "vs_bp_noninvasive (m)" ~ "blood_pressure_m",
+#                                       observation_name == "VS_Temperature (C) calc" ~ "temperature")) |>
+#   group_by(empi, observation_name) |>
+#   arrange(valuetext) |>
+#   filter(row_number() == 1) |>
+#   select(empi, result_dt =  recordeddtm, result_value = valuetext, name = observation_name)
+
+
+
+all_labs_clean <- bind_rows(labs_low_long, labs_high_long) |> bind_rows(vitals_long)
 
 write_rds(all_labs_clean, here::here("data/derived/all_labs_clean.rds"))
 
