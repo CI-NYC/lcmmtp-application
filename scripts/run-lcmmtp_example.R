@@ -32,31 +32,4 @@ fit <- lcmmtp(lcmmtp_foo,
 
 fit
 
-# modify data set so that if the observation is observed at c1, they have an outcome
-lcmmtp_foo_mod <- lcmmtp_foo |>
-  mutate(Y_mod = case_when(is.na(Y) & c1 == 1 ~ 0,
-                       TRUE ~ Y
-                       ))
-
-# variables for 1 time point
-tp1_vars <- lcmmtp:::lcmmtp_variables$new(
-  L = list(c("L_1")),
-  A = c("A_1"),
-  Z = list(c("Z_1")),
-  M = c("M_1"),
-  Y = "Y_mod",
-  cens = c("c1")
-)
-
-tp1_fit <- lcmmtp(lcmmtp_foo_mod,
-              tp1_vars,
-              d_ap,
-              d_as,
-              "glm",
-              folds=2
-)
-
-#Error in `[.default`(M, complete.cases(M), ) : 
-#incorrect number of dimensions
-
 

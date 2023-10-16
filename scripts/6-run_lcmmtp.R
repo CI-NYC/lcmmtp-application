@@ -10,6 +10,8 @@ library(lcmmtp) # remotes::install_github("nt-williams/lcmmtp")
 library(mlr3superlearner) # remotes::install_github("nt-williams/mlr3superlearner")
 library(tictoc)
 
+set.seed(7)
+
 all_wide <- read_rds("data/derived/all_wide.rds")
 
 # set d prime and d star functions
