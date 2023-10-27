@@ -127,9 +127,16 @@ As <-
   aki_windows_clean |>
   left_join(aki_first |> select(empi, A_time)) |>
   left_join(Ms) |>
-  mutate(A = case_when(is.na(A_time) ~ 0, # never intubated
-                       l_start < A_time ~ 0,
-                       l_start >= A_time ~ 1)) 
+  mutate(A = case_when(# is.na(A_time) ~ 0, # never intubated
+                       # l_start < A_time ~ 0,
+                       l_start >= A_time ~ 2)) 
+
+# fill in A = 0 
+As <- 
+  nevers_clean |>
+  left_join(first_o2 |> ungroup()) |>
+  mutate(A = case_when(first_o2 < z_end ~ 1, TRUE ~ 0)) |>
+  select(-first_o2, -any_o2)
 
 # Note I'll probably need to carry these Y's through (deterministic)
 Ys <-

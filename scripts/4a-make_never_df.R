@@ -16,6 +16,8 @@ cp_dt <- read_rds(here::here("data/derived/dts_cohort.rds"))
 all_labs_clean <- read_rds(here::here("data/derived/all_labs_clean.rds")) |>
   mutate(name = snakecase::to_snake_case(name))
 
+first_o2 <- read_rds("data/derived/first_o2.rds")
+
 ### Filter for patients who were never intubated or AKI
 nevers <-
   cp_dt |>
@@ -77,10 +79,12 @@ Ms <-
   nevers_clean |>
   mutate(M = 0)
 
-# fill in A = 0 (change for oxygenation data)
+# fill in A = 0 
 As <- 
   nevers_clean |>
-  mutate(A = 0)
+  left_join(first_o2 |> ungroup()) |>
+  mutate(A = case_when(first_o2 < z_end ~ 1, TRUE ~ 0)) |>
+  select(-first_o2, -any_o2)
 
 # Note I'll probably need to carry these Y's through (deterministic)
 Ys <-
