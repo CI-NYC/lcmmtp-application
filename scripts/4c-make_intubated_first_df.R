@@ -16,6 +16,8 @@ cp_dt <- read_rds(here::here("data/derived/dts_cohort.rds"))
 all_labs_clean <- read_rds(here::here("data/derived/all_labs_clean.rds")) |>
   mutate(name = snakecase::to_snake_case(name))
 
+first_o2 <- read_rds("data/derived/first_o2.rds")
+
 ### Find patients for whom intubated before AKI (A_t < M_t)
 int_first <- 
   cp_dt |>
@@ -89,8 +91,6 @@ int_windows <-
   mutate(index = row_number()) |>  # index for modifying in next step
   left_join(int_first |> select(empi, M_time))  # add in aki time for next step
 
-int_windows |> distinct(empi)
-
 #### THREE TYPES OF PATIENTS
 # 1. get intubated and never have AKI [not in check_empis]
 # 2. get intubated then get AKI before the death date, but not their final time point [in check_empis] -- need to change z_end and l_start for two rows
@@ -113,16 +113,6 @@ int_windows_section23 <-
   arrange(l_start) |>
   add_count()
 
-int_windows_section23 |> filter(n == 3)
-
-nrow(int_windows)
-nrow(int_windows_section23)
-nrow(int_windows_section1)
-
-distinct(int_windows, empi) |> nrow()
-distinct(int_windows_section23, empi) |> nrow()
-distinct(int_windows_section1, empi) |> nrow()
-
 # Keep the row that they got AKI *and* the row after, because we need to change z_end and l_start
 int_windows_section2 <-
   int_windows_section23 |>
@@ -136,9 +126,6 @@ int_windows_section2_mod1 <-
                 # l_end = as.POSIXct((as.numeric(l_start) + as.numeric(z_end)) / 2, origin = '1970-01-01'), # get the midway point between L and Z start/end times, call this l_end
                 #  z_start = l_end + seconds(1))  |>
   select(empi, window, l_start, l_end, z_start, z_end, index, M_time)
-
-int_windows_section2_mod1 |>
-  filter(empi == "1000017735")
 
 # change 2nd row (new l_start time)
 int_windows_section2_mod2 <- 
@@ -156,7 +143,6 @@ int_windows_section3 <-
   filter(n == 1) # remove patients that get AKI in final time point for now
 
 dup <- int_windows_section3
-
 
 # modify existing final row so that M is the final time point in this window t
 section3_mod_row <-
@@ -228,13 +214,18 @@ Ms <-
   mutate(M = case_when(window >= M_this_window ~ 1, TRUE ~ 0)) |>
   select(empi, window, M_this_window, M)
 
-# mark which window intubation occurred --> switch to intubation = 2 later
+# mark which window supp o2 or intubation occurred 
 As <-
   int_windows_clean |>
   left_join(int_first |> select(empi, A_time)) |>
-  mutate(A = case_when(is.na(A_time) ~ 0, # never intubated
-                       l_start < A_time ~ 0,
-                       l_start >= A_time ~ 1))
+  left_join(first_o2) |>
+  mutate(A = case_when(# is.na(A_time) ~ 0, # never intubated
+    A_time <= z_end ~ 2,
+    first_o2 <= z_end ~ 1,
+    TRUE ~ 0)) |>
+  select(-first_o2, -any_o2)
+
+
 
 # Note I'll probably need to carry these Y's through (deterministic)
 Ys <-

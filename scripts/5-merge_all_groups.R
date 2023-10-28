@@ -23,7 +23,7 @@ all_wide <-
   map_dfr(
   list("nevers", "aki_first", "int_first"),
   function(group) {
-  
+
   Ls_and_Zs <- read_rds(here::here(fp, group, "Ls_and_Zs.rds"))
   As <- read_rds(here::here(fp, group, "As.rds"))
   Ms <- read_rds(here::here(fp, group, "Ms.rds"))
@@ -41,7 +41,8 @@ all_wide <-
   
   # compile the rest of the long data
   dat_long <- reduce(list(As, Ms, Cs, Ys), ~left_join(.x, .y)) |>
-    filter(window <= max_window)
+    filter(window <= max_window) # |>
+    # mutate(A = factor(A))
   
   # make the rest of the data wide
   dat_wide <- pivot_wider(dat_long, 

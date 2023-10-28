@@ -14,6 +14,7 @@ source(here::here("scripts/0-functions.R"))
 cp_dt <- read_rds(here::here("data/derived/dts_cohort.rds"))
 all_labs_clean <- read_rds(here::here("data/derived/all_labs_clean.rds")) |>
   mutate(name = snakecase::to_snake_case(name))
+first_o2 <- read_rds("data/derived/first_o2.rds")
 
 ### Find patients for whom intubated before AKI (A_t < M_t)
 aki_first <- 
@@ -111,7 +112,6 @@ Ls_and_Zs <-
   mutate(L_value = ifelse(is.na(L_value), -99999, L_value), # if no observations before, fill in with -99999 (could switch to median value)
          Z_value = ifelse(is.na(Z_value), -99999, Z_value))
 
-
 # fill in M = 1 for all the windows where intubation occurs on or after
 # need to update this for different levels of supp o2 later
 Ms <- 
@@ -121,21 +121,17 @@ Ms <-
   fill(M_this_window, .direction = "downup") |>
   mutate(M = case_when(window >= M_this_window ~ 1, TRUE ~ 0)) |>
   select(empi, window, M_this_window, M)
-
-# mark which window intubation occurred --> switch to intubation = 2 later
-As <-
+ 
+# mark which window supp o2 or intubation occurred 
+As <- 
   aki_windows_clean |>
   left_join(aki_first |> select(empi, A_time)) |>
-  left_join(Ms) |>
+  left_join(first_o2) |>
   mutate(A = case_when(# is.na(A_time) ~ 0, # never intubated
                        # l_start < A_time ~ 0,
-                       l_start >= A_time ~ 2)) 
-
-# fill in A = 0 
-As <- 
-  nevers_clean |>
-  left_join(first_o2 |> ungroup()) |>
-  mutate(A = case_when(first_o2 < z_end ~ 1, TRUE ~ 0)) |>
+                       A_time <= z_end ~ 2,
+                       first_o2 <= z_end ~ 1,
+                       TRUE ~ 0)) |>
   select(-first_o2, -any_o2)
 
 # Note I'll probably need to carry these Y's through (deterministic)
