@@ -7,6 +7,7 @@
 
 library(tidyverse)
 
+fp <- "data/derived" # folder where derived data lives
 cohort <- read_rds(here::here(fp, "hospitalized_cohort_with_queens.rds")) # contains baseline data
 all_wide_pre_baseline <- read_rds(here::here(fp, "all_wide_pre_baseline.rds"))
 
@@ -18,6 +19,8 @@ baseline <-
          cad, home_o2_yn, dm, htn, cva, cirrhosis, ckd_or_esrd, asthma, copd, active_cancer, 
          immunosuppressed, ild, hiv, hypoxia_ed) |>
   mutate(bmi_miss = case_when(is.na(bmi) ~ 1, TRUE ~ 0),
+         bmi = case_when(is.na(bmi) ~ 0, TRUE ~ bmi),
+         hypoxia_ed = case_when(hypoxia_ed == "Yes" ~ 1, TRUE ~ 0),
   home_o2_miss = case_when(is.na(home_o2_yn) ~ 1, TRUE ~ 0), 
   race_miss = case_when(is.na(race) ~ 1, TRUE ~ 0),
   ethnicity_miss = case_when(is.na(ethnicity) ~ 1, TRUE ~ 0),
@@ -41,3 +44,5 @@ all_wide <-
   select(id, starts_with("L_1_"), everything(), -empi)
 
 write_rds(all_wide, ("data/derived/all_wide.rds"))
+
+all_wide |> select(contains("L_"))
