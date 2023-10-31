@@ -41,5 +41,3 @@ all_wide <-
   select(id, starts_with("L_1_"), everything(), -empi)
 
 write_rds(all_wide, ("data/derived/all_wide.rds"))
-
-

@@ -71,9 +71,8 @@ Ls_and_Zs <-
   fill(L_value, Z_value, .direction = "down") |> # Last Observation Carried Forward, by empi and covariate
   mutate(L_missing = ifelse(is.na(L_value), 1, 0), # create indicators for missing L and Z
          Z_missing = ifelse(is.na(Z_value), 1, 0)) |>
-  mutate(L_value = ifelse(is.na(L_value), -99999, L_value), # if no observations before, fill in with -99999 (could switch to median value)
-         Z_value = ifelse(is.na(Z_value), -99999, Z_value)) 
-
+  mutate(L_value = ifelse(is.na(L_value), 0, L_value), # if no observations before, fill in with -99999 (could switch to median value)
+         Z_value = ifelse(is.na(Z_value), 0, Z_value)) 
 
 # fill in M = 0 for all the mediators (this group never gets AKI)
 Ms <- 
