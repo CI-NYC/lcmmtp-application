@@ -55,9 +55,7 @@ all_wide <-
   
   return(dat_wide)
   }
-) |> mutate(id = row_number()) |> # deidentify
-  select(-empi) |>
-  select(id, everything())
+)
 
-write_rds(all_wide, ("data/derived/all_wide.rds"))
+write_rds(all_wide, ("data/derived/all_wide_pre_baseline.rds"))
 
