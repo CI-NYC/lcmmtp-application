@@ -85,5 +85,4 @@ To enforce temporality in the time-discretized data structure, intervals depende
 
 ### TO DO:
 
-- make a new level for respiratory support
 - add in co-prescriptions?

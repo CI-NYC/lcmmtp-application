@@ -88,7 +88,7 @@ vars <- lcmmtp:::lcmmtp_variables$new(
 # Comment/uncomment to debug
 # An `lcmmtp_variables` object mapping observed variables to the assumed variable structure.
 vars <- lcmmtp:::lcmmtp_variables$new(
-  L = list(c("L_value_1_glucose"), c("L_value_2_glucose")),
+  L = list(c("L_value_1_glucose", "baseline_age"), c("L_value_2_glucose")),
   A = c("A_1", "A_2"),
   Z = list(c("Z_value_1_glucose"), c("Z_value_2_glucose")),
   M = c("M_1", "M_2"),

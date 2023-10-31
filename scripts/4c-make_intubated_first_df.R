@@ -195,11 +195,11 @@ all_labs <- map2(map_grid$name, map_grid$window, ~divide_labs(int_windows_clean,
 # put together all L_t and Z_t in long format and create missingness indicators
 Ls_and_Zs <- 
   data.table::rbindlist(all_labs) |> # bind all rows together
-  mutate(L_missing = ifelse(is.na(L_value), 1, 0), # create indicators for missing L and Z
-         Z_missing = ifelse(is.na(Z_value), 1, 0)) |>
   group_by(empi, covar) |> 
   arrange(empi, window) |>
   fill(L_value, Z_value, .direction = "down") |> # Last Observation Carried Forward, by empi and covariate
+  mutate(L_missing = ifelse(is.na(L_value), 1, 0), # create indicators for missing L and Z
+         Z_missing = ifelse(is.na(Z_value), 1, 0)) |>
   mutate(L_value = ifelse(is.na(L_value), -99999, L_value), # if no observations before, fill in with -99999 (could switch to median value)
          Z_value = ifelse(is.na(Z_value), -99999, Z_value))
 

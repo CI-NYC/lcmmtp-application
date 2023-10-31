@@ -19,7 +19,7 @@ int_first <- read_rds(here::here(fp, "int_first", "int_first.rds"))
 aki_first <- read_rds(here::here(fp, "aki_first", "aki_first.rds"))
 nevers <- read_rds(here::here(fp, "nevers", "nevers.rds"))
   
-all_wide <-
+all_wide_pre_baseline <-
   map_dfr(
   list("nevers", "aki_first", "int_first"),
   function(group) {
@@ -57,5 +57,5 @@ all_wide <-
   }
 )
 
-write_rds(all_wide, ("data/derived/all_wide_pre_baseline.rds"))
+write_rds(all_wide_pre_baseline, ("data/derived/all_wide_pre_baseline.rds"))
 

@@ -66,13 +66,14 @@ all_labs <- map2(map_grid$name, map_grid$window, ~divide_labs(nevers_clean, .x, 
 Ls_and_Zs <- 
   data.table::rbindlist(all_labs) |> # bind all rows together
   mutate(covar = snakecase::to_snake_case(as.character(covar))) |> # clean up covariate names for wide col names later
-  mutate(L_missing = ifelse(is.na(L_value), 1, 0), # create indicators for missing L and Z
-         Z_missing = ifelse(is.na(Z_value), 1, 0)) |>
   group_by(empi, covar) |> 
   arrange(empi, window) |>
   fill(L_value, Z_value, .direction = "down") |> # Last Observation Carried Forward, by empi and covariate
+  mutate(L_missing = ifelse(is.na(L_value), 1, 0), # create indicators for missing L and Z
+         Z_missing = ifelse(is.na(Z_value), 1, 0)) |>
   mutate(L_value = ifelse(is.na(L_value), -99999, L_value), # if no observations before, fill in with -99999 (could switch to median value)
-         Z_value = ifelse(is.na(Z_value), -99999, Z_value))
+         Z_value = ifelse(is.na(Z_value), -99999, Z_value)) 
+
 
 # fill in M = 0 for all the mediators (this group never gets AKI)
 Ms <- 
