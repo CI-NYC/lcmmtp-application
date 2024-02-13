@@ -45,4 +45,3 @@ all_wide <-
 
 write_rds(all_wide, ("data/derived/all_wide.rds"))
 
-all_wide |> select(contains("L_"))
