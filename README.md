@@ -76,13 +76,3 @@ To enforce temporality in the time-discretized data structure, intervals depende
 - `Y_t` : Indicator for death at the end of time window $t$. Once $Y_t = 1$, the outcome is deterministic (equal to 1).
 
 - `Observed_t` : An indicator for patient having an outcome `Y_t` *observed*. Thus, this is `1` until the window in which the patient is discharged, when it becomes `0`.
-
-## Analysis
-
-**Software:**
-
-**Superlearner candidates:** `glm`, `lightgbm`, `earth`, `glmnet`
-
-### TO DO:
-
-- add in co-prescriptions?
