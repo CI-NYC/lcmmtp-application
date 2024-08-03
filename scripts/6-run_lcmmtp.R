@@ -26,7 +26,7 @@ results_path <- ""
 
 all_wide <- read_rds(paste0(data_path, "all_wide.rds"))
 
-### COMMENT/UNCOMMENT THE FACTORS -- mlr3 currently can't handle?
+### COMMENT/UNCOMMENT THE FACTORS -- mlr3 currently can't handle
 # set d prime and d star functions
 d1 <- function(data, trt) {
   # extract time point
@@ -95,19 +95,6 @@ vars <- lcmmtp:::lcmmtp_variables$new(
 folds <- 3
 lrnrs <- c("mean", "earth", "cv_glmnet", "lightgbm")
 
-## tic()
-## fit_d1d2 <- lcmmtp(all_wide,
-##                    vars,
-##                    d1,
-##                    d2,
-##                    .lcmmtp_control(folds = folds,
-##                                    learners_trt = lrnrs,
-##                                    learners_mediator = lrnrs,
-##                                    learners_QL = lrnrs,
-##                                    learners_QZ = lrnrs,
-##                                    learners_QM = lrnrs)
-## )
-## toc()
 
 tic()
 fit_d2d1 <- lcmmtp(all_wide,
